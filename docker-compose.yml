@@ -1,0 +1,45 @@
+# ── WeatherGPT Local Development ──────────────────────────────
+# Run with: docker compose up
+#
+# Services:
+#   - backend: FastAPI on http://localhost:8000
+#   - db: PostgreSQL on localhost:5432 (for local dev only)
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://weathergpt:weathergpt@db:5432/weathergpt
+      - DEBUG=true
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app  # Hot reload in dev
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: weathergpt
+      POSTGRES_PASSWORD: weathergpt
+      POSTGRES_DB: weathergpt
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./data/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U weathergpt"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
