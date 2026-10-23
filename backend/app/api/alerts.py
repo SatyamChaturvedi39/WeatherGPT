@@ -7,7 +7,7 @@ statistical thresholds, and anomaly detection.
 
 from fastapi import APIRouter, Query, HTTPException
 from app.services.weather import WeatherService
-from app.services.risk_engine import assess_weather_risks
+from app.services.risk_engine import assess_weather_risks, compute_activity_suitability
 
 router = APIRouter()
 
@@ -18,16 +18,17 @@ async def get_alerts(
     lon: float = Query(..., description="Longitude", ge=-180, le=180),
 ):
     """
-    Get active weather alerts for a location.
+    Get active weather alerts and commercial activity suitability scores for a location.
     Evaluates current and short-term atmospheric dynamics to generate
-    prioritized risk banners (LOW, MODERATE, HIGH, EXTREME).
+    prioritized risk banners (LOW, MODERATE, HIGH, EXTREME) and activity ratings.
     """
     service = WeatherService()
     try:
         current_data = await service.get_current_conditions(lat, lon)
         hourly_data = await service.get_hourly_forecast(lat, lon, hours=24)
         alerts = assess_weather_risks(current_data, hourly_data)
-        
+        activity_scores = compute_activity_suitability(current_data, hourly_data)
+
         # Summary counts
         severity_counts = {"EXTREME": 0, "HIGH": 0, "MODERATE": 0, "LOW": 0}
         for a in alerts:
@@ -39,6 +40,7 @@ async def get_alerts(
             "location": current_data.get("location"),
             "alerts": alerts,
             "summary": severity_counts,
+            "activity_suitability": activity_scores,
             "count": len(alerts),
         }
     except Exception as e:

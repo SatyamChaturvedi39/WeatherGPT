@@ -29,10 +29,11 @@ class ChatRequest(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    """Chat response with source citations and grounding confidence."""
+    """Chat response with source citations, grounding confidence, and location."""
     reply: str
     sources: list[dict[str, Any]] = []
     confidence: float = 1.0
+    detected_location: dict[str, Any] | None = None
 
 
 @router.post("/", response_model=ChatResponse)
@@ -40,7 +41,7 @@ async def chat(request: ChatRequest):
     """
     Send a message to the WeatherGPT chat assistant.
 
-    Retrieves live atmospheric data for the active location, applies RAG grounding,
+    Retrieves live atmospheric data for the active location or dynamic entity, applies RAG grounding,
     and returns a substantiated answer with source citations.
     """
     weather_context = None
@@ -56,7 +57,6 @@ async def chat(request: ChatRequest):
                 "hourly": hourly.get("hourly", []),
             }
         except Exception:
-            # Continue without weather context if fetch fails
             pass
 
     history_payload = [{"role": m.role, "content": m.content} for m in request.history]
@@ -72,4 +72,5 @@ async def chat(request: ChatRequest):
         reply=result.get("reply", ""),
         sources=result.get("sources", []),
         confidence=result.get("confidence", 0.95),
+        detected_location=result.get("detected_location"),
     )

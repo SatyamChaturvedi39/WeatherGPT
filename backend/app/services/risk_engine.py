@@ -166,3 +166,110 @@ def assess_weather_risks(current: dict[str, Any], hourly: dict[str, Any] | None 
         })
 
     return alerts
+
+
+def compute_activity_suitability(current: dict[str, Any], hourly: dict[str, Any] | None = None) -> dict[str, Any]:
+    """
+    Computes activity-specific operational scores (0-100) and actionable safety advisories.
+    Commercial value for logistics, event planners, athletes, and drone operators.
+    """
+    curr = current.get("current", {})
+    temp = curr.get("temperature_2m", 20.0)
+    wind = curr.get("wind_speed_10m", 0.0)
+    precip = curr.get("precipitation", 0.0)
+    humidity = curr.get("relative_humidity_2m", 50.0)
+    code = curr.get("weather_code", 0)
+
+    # 1. Commuting & Highway Transit
+    commute_score = 100
+    commute_warnings = []
+    if precip > 5.0 or code in [95, 96, 99]:
+        commute_score -= 40
+        commute_warnings.append("Hydroplaning hazard; standing road water")
+    elif precip > 0.5:
+        commute_score -= 15
+        commute_warnings.append("Wet road surfaces; increased braking distance")
+    if code in [45, 48]:
+        commute_score -= 30
+        commute_warnings.append("Severe fog; horizontal visibility < 500m")
+    if wind > 50:
+        commute_score -= 25
+        commute_warnings.append("Crosswinds affecting high-profile vehicles")
+
+    # 2. Athletics & Outdoor Running
+    running_score = 100
+    running_warnings = []
+    if temp > 32 or (temp > 28 and humidity > 70):
+        running_score -= 45
+        running_warnings.append("High heat index; dehydration and cramp risk")
+    elif temp < 2:
+        running_score -= 25
+        running_warnings.append("Freezing air; airway irritation and icy footing")
+    if precip > 2:
+        running_score -= 30
+        running_warnings.append("Active rain causing damp footwear & slick trails")
+    if wind > 35:
+        running_score -= 20
+        running_warnings.append("Elevated aerodynamic drag and wind chill")
+
+    # 3. UAV & Drone Flight Operations
+    drone_score = 100
+    drone_warnings = []
+    if wind > 38:
+        drone_score -= 60
+        drone_warnings.append("Wind exceeds safe stabilization limits (>38 km/h)")
+    elif wind > 25:
+        drone_score -= 25
+        drone_warnings.append("Moderate turbulence; increased battery drain")
+    if precip > 0.1:
+        drone_score -= 50
+        drone_warnings.append("Precipitation risk to unsealed optical sensors")
+    if code in [45, 48]:
+        drone_score -= 40
+        drone_warnings.append("Visual Line of Sight (VLOS) compromised by fog")
+
+    # 4. Construction & Outdoor Staging
+    construction_score = 100
+    construction_warnings = []
+    if code in [95, 96, 99]:
+        construction_score -= 70
+        construction_warnings.append("Lightning hazard: immediately halt crane and scaffolding ops")
+    if wind > 40:
+        construction_score -= 40
+        construction_warnings.append("High-altitude crane hoist limit exceeded")
+    if precip > 10:
+        construction_score -= 40
+        construction_warnings.append("Ground saturation; delays in concrete curing and trenching")
+
+    def _rating(score: int) -> str:
+        if score >= 85: return "Optimal"
+        if score >= 65: return "Favorable"
+        if score >= 45: return "Caution Advised"
+        return "Hazardous / No-Go"
+
+    return {
+        "commuting": {
+            "name": "Commute & Road Transit",
+            "score": max(10, commute_score),
+            "status": _rating(commute_score),
+            "advisories": commute_warnings or ["Clear road surfaces and stable visibility"],
+        },
+        "running": {
+            "name": "Outdoor Athletics & Running",
+            "score": max(10, running_score),
+            "status": _rating(running_score),
+            "advisories": running_warnings or ["Ideal thermal comfort and clean air density"],
+        },
+        "aviation_drone": {
+            "name": "UAV & Commercial Drone Flight",
+            "score": max(10, drone_score),
+            "status": _rating(drone_score),
+            "advisories": drone_warnings or ["Calm laminar airflow, clear optical line of sight"],
+        },
+        "construction": {
+            "name": "Construction & Rigging",
+            "score": max(10, construction_score),
+            "status": _rating(construction_score),
+            "advisories": construction_warnings or ["Low structural wind loading and dry ground conditions"],
+        },
+    }

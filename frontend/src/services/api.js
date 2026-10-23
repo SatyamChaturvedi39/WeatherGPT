@@ -51,6 +51,22 @@ export async function getExplainForecast(lat, lon) {
   return apiFetch(`/api/forecast/explain?lat=${lat}&lon=${lon}`);
 }
 
+export async function getRouteForecast(origin, destination, steps = 5, transitMode = "two_wheeler") {
+  return apiFetch(`/api/forecast/route?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&steps=${steps}&transit_mode=${encodeURIComponent(transitMode)}`);
+}
+
+export async function getAirQuality(lat, lon) {
+  return apiFetch(`/api/forecast/aqi?lat=${lat}&lon=${lon}`);
+}
+
+export async function getBangaloreMicroclimates() {
+  return apiFetch(`/api/forecast/bangalore/microclimates`);
+}
+
+export async function getModelBenchmarks() {
+  return apiFetch(`/api/forecast/benchmarks`);
+}
+
 // ── Alerts API ────────────────────────────────────────────────
 
 export async function getAlerts(lat, lon) {

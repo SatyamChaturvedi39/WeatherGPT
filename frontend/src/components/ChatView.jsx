@@ -7,30 +7,51 @@ import {
   ShieldCheck,
   RotateCcw,
   MapPin,
-  ExternalLink,
-  HelpCircle,
+  CheckCircle2,
+  Compass,
+  ArrowRightLeft,
+  Volume2,
+  VolumeX,
+  Copy,
+  Check,
 } from "lucide-react";
 import { sendChatMessage } from "../services/api";
 
-const QUICK_PROMPTS = [
-  "Will I need an umbrella today?",
-  "What should I wear tonight?",
-  "Is the weather good for an outdoor run?",
-  "Summarize the 24-hour temperature trend.",
-  "Are there any active weather risks?",
+const RESEARCH_PROMPTS = [
+  "Do I need a raincoat to go from Vimanapura to Koramangala right now?",
+  "Will rain flood the Outer Ring Road between Marathahalli and Bellandur?",
+  "Compare current temperature and rain risk between Indiranagar and Whitefield",
+  "Is atmospheric wind safe for UAV / drone operations in Electronic City?",
+  "What is the 24-hour thermal and monsoon precipitation trend in Bengaluru?",
+  "Compare weather conditions between Delhi and Mumbai",
 ];
 
-export default function ChatView({ location }) {
+export default function ChatView({ location, onUpdateLocation }) {
+  const [activeLoc, setActiveLoc] = useState(location);
+  const [commuteOrigin, setCommuteOrigin] = useState("Vimanapura");
+  const [commuteDest, setCommuteDest] = useState("Koramangala");
+  const [transitMode, setTransitMode] = useState("two_wheeler");
+  const [speakingId, setSpeakingId] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
+
   const [messages, setMessages] = useState([
     {
       id: "init",
       role: "assistant",
-      content: `Hello! I'm **WeatherGPT**, your AI meteorological intelligence assistant. I ground every answer in real-time atmospheric observations and machine learning models with zero hallucination. Ask me anything about ${location ? location.name : "the weather"}!`,
+      content: `### 🌦️ Welcome to WeatherGPT Bharat Assistant
+
+I provide **hyper-local, sub-hourly weather intelligence** calibrated for Indian urban commutes and convective microclimates.
+
+**How I can assist your daily routine:**
+• 🛵 **Commute Rain Shield:** Ask if you need a raincoat or poncho between neighborhoods (*"Do I need a raincoat from Vimanapura to Koramangala right now?"*).
+• ⏱️ **Safe Departure Window:** Find out whether you should leave immediately or wait 20 minutes to beat an incoming cloud burst.
+• 🌊 **Waterlogging & Road Puddle Alert:** Get warnings for low-lying chokepoints (Sony World Signal, 80ft Rd, Ejipura underpass, Silk Board).
+• 🌐 **Inter-City & Regional Climate:** Compare conditions between Delhi, Mumbai, Bengaluru, or Chennai.`,
       sources: [
         {
-          title: "System Initialization",
-          source: "WeatherGPT RAG Grounding Engine v0.1.0",
-          values: "ECMWF / Open-Meteo High-Resolution Data Stream",
+          title: "Bengaluru Microclimate Spatial Index",
+          source: "25+ Local Station Nodes & High-Resolution ECMWF",
+          values: "Calibrated for Urban Traffic Speeds & Convective Cells",
         },
       ],
       confidence: 0.99,
@@ -41,6 +62,21 @@ export default function ChatView({ location }) {
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
+  useEffect(() => {
+    if (location) {
+      setActiveLoc(location);
+    }
+  }, [location]);
+
+  // Cleanup speech synthesis on unmount
+  useEffect(() => {
+    return () => {
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -48,6 +84,58 @@ export default function ChatView({ location }) {
   useEffect(() => {
     scrollToBottom();
   }, [messages, loading]);
+
+  const handleToggleSpeak = (msgId, rawContent) => {
+    if (!("speechSynthesis" in window)) {
+      alert("Audio speech synthesis is not supported in this browser.");
+      return;
+    }
+
+    if (speakingId === msgId) {
+      window.speechSynthesis.cancel();
+      setSpeakingId(null);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+
+    // Clean markdown text for natural speech
+    const cleanText = rawContent
+      .replace(/<[^>]*>/g, " ")
+      .replace(/[#*`_~>]/g, " ")
+      .replace(/\|.*?\|/g, " ")
+      .replace(/•/g, " ")
+      .replace(/---/g, " ")
+      .replace(/\s+/g, " ")
+      .slice(0, 450);
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.onend = () => setSpeakingId(null);
+    utterance.onerror = () => setSpeakingId(null);
+
+    setSpeakingId(msgId);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleCopyPass = (msgId, rawContent) => {
+    const cleanText = rawContent.replace(/<[^>]*>/g, "").replace(/[#*`]/g, "");
+    const passCard = 
+`🌦️ WEATHERGPT BHARAT — COMMUTE INTELLIGENCE PASS
+Corridor: ${commuteOrigin} ➔ ${commuteDest}
+Vehicle Mode: ${transitMode.replace("_", " ").toUpperCase()}
+Timestamp: ${new Date().toLocaleTimeString()}
+
+${cleanText.slice(0, 450)}...
+
+Generated by WeatherGPT Bharat (Open-Meteo & ECMWF Microclimate Grid)`;
+
+    navigator.clipboard.writeText(passCard).then(() => {
+      setCopiedId(msgId);
+      setTimeout(() => setCopiedId(null), 2500);
+    });
+  };
 
   const handleSend = async (textToSend) => {
     const query = textToSend || input;
@@ -65,20 +153,28 @@ export default function ChatView({ location }) {
     setLoading(true);
 
     try {
-      const historyPayload = messages.map((m) => ({
+      const historyPayload = messages.slice(-6).map((m) => ({
         role: m.role,
         content: m.content,
       }));
 
-      const res = await sendChatMessage(query.trim(), historyPayload, location);
+      const res = await sendChatMessage(query.trim(), historyPayload, activeLoc);
+
+      if (res.detected_location) {
+        setActiveLoc(res.detected_location);
+        if (onUpdateLocation) {
+          onUpdateLocation(res.detected_location);
+        }
+      }
 
       const botMsg = {
         id: `bot-${Date.now()}`,
         role: "assistant",
         content: res.reply,
         sources: res.sources || [],
-        confidence: res.confidence || 0.95,
-        provider: res.provider,
+        confidence: res.confidence || 0.96,
+        provider: res.provider || "WeatherGPT RAG Grounding Engine",
+        detected_location: res.detected_location,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       };
 
@@ -87,7 +183,7 @@ export default function ChatView({ location }) {
       const errorMsg = {
         id: `err-${Date.now()}`,
         role: "assistant",
-        content: `⚠️ Failed to retrieve atmospheric intelligence: ${err.message}. Please check your connection or try again.`,
+        content: `**Atmospheric Query Notice:** Unable to retrieve telemetry: ${err.message}. Please verify the city name or retry.`,
         sources: [],
         confidence: 0,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
@@ -98,12 +194,16 @@ export default function ChatView({ location }) {
     }
   };
 
-  const handleClearHistory = () => {
+  const handleResetSession = () => {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    setSpeakingId(null);
     setMessages([
       {
         id: "cleared",
         role: "assistant",
-        content: `Chat session reset. Ask me anything about current atmospheric conditions, precipitation risks, or clothing advice for ${location ? location.name : "any location"}!`,
+        content: `Session refreshed. Ask any question regarding local conditions, precipitation timing, or comparative climate for any city.`,
         sources: [],
         confidence: 0.99,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
@@ -112,89 +212,200 @@ export default function ChatView({ location }) {
   };
 
   return (
-    <div className="chat-container glass-panel">
-      {/* ── Chat Header ────────────────────────────────────────── */}
-      <div className="chat-header-bar">
-        <div className="chat-title-group">
-          <div className="bot-avatar-glow">
-            <Bot size={22} className="text-cyan" />
+    <div className="chat-layout-wrapper">
+      {/* ── Chat Header Bar ───────────────────────────────────── */}
+      <div className="chat-header-panel">
+        <div className="header-meta-group">
+          <div className="agent-avatar-box">
+            <Bot size={20} />
           </div>
           <div>
-            <h3>WeatherGPT Conversational Assistant</h3>
-            <p className="chat-substatus">
-              <span className="live-dot"></span> Grounded RAG Pipeline • Llama-3 / Gemini Flash Fallback
+            <h3>Grounded Meteorological RAG Assistant</h3>
+            <p className="agent-subtext">
+              <span className="live-status-dot"></span> Dynamic Entity Resolution • Multi-City Comparative Grounding
             </p>
           </div>
         </div>
 
-        <div className="chat-actions">
-          {location && (
-            <div className="active-loc-chip">
-              <MapPin size={14} className="text-cyan" />
-              <span>{location.name}</span>
+        <div className="header-actions-group">
+          {activeLoc && (
+            <div className="target-location-badge font-mono">
+              <MapPin size={13} className="text-cyan" />
+              <span>
+                {activeLoc.name}
+                {activeLoc.country ? `, ${activeLoc.country}` : ""}
+              </span>
             </div>
           )}
-          <button className="icon-btn-subtle" onClick={handleClearHistory} title="Clear Conversation">
-            <RotateCcw size={16} />
+          <button className="subtle-btn" onClick={handleResetSession} title="Reset Conversation">
+            <RotateCcw size={15} />
+            <span>Reset</span>
           </button>
         </div>
       </div>
 
-      {/* ── Prompt Suggestions ──────────────────────────────────── */}
-      <div className="prompt-chips-row">
-        {QUICK_PROMPTS.map((prompt, i) => (
+      {/* ── Quick Commute Rain Shield Widget Bar ────────────────── */}
+      <div className="commute-quick-bar">
+        <div className="commute-bar-label">
+          <Compass size={14} className="text-emerald" />
+          <span className="font-bold">Bangalore Commute Rain Shield:</span>
+        </div>
+        <div className="commute-selectors-wrap">
+          <select
+            value={commuteOrigin}
+            onChange={(e) => setCommuteOrigin(e.target.value)}
+            className="commute-select font-mono"
+          >
+            <option value="Vimanapura">Vimanapura (HAL)</option>
+            <option value="Koramangala">Koramangala</option>
+            <option value="Indiranagar">Indiranagar</option>
+            <option value="Whitefield">Whitefield</option>
+            <option value="Electronic City">Electronic City</option>
+            <option value="HSR Layout">HSR Layout</option>
+            <option value="Bellandur">Bellandur</option>
+            <option value="Silk Board">Central Silk Board</option>
+            <option value="Manyata">Manyata Tech Park</option>
+            <option value="Jayanagar">Jayanagar</option>
+            <option value="Malleshwaram">Malleshwaram</option>
+            <option value="Hebbal">Hebbal</option>
+          </select>
+          <span className="route-arrow">➔</span>
+          <select
+            value={commuteDest}
+            onChange={(e) => setCommuteDest(e.target.value)}
+            className="commute-select font-mono"
+          >
+            <option value="Koramangala">Koramangala</option>
+            <option value="Vimanapura">Vimanapura (HAL)</option>
+            <option value="Indiranagar">Indiranagar</option>
+            <option value="Whitefield">Whitefield</option>
+            <option value="Electronic City">Electronic City</option>
+            <option value="HSR Layout">HSR Layout</option>
+            <option value="Bellandur">Bellandur</option>
+            <option value="Silk Board">Central Silk Board</option>
+            <option value="Manyata">Manyata Tech Park</option>
+            <option value="Jayanagar">Jayanagar</option>
+            <option value="Malleshwaram">Malleshwaram</option>
+            <option value="Hebbal">Hebbal</option>
+          </select>
+
+          {/* Mode Selector */}
+          <select
+            value={transitMode}
+            onChange={(e) => setTransitMode(e.target.value)}
+            className="commute-select font-mono mode-select"
+            title="Select Transit Mode"
+          >
+            <option value="two_wheeler">🛵 Two-Wheeler</option>
+            <option value="auto_cab">🛺 Auto / Cab</option>
+            <option value="four_wheeler">🚗 Four-Wheeler</option>
+            <option value="pedestrian">🚶 Walking</option>
+          </select>
+
+          <button
+            className="check-shield-btn"
+            onClick={() => handleSend(`Do I need a raincoat to go from ${commuteOrigin} to ${commuteDest} right now on a ${transitMode.replace("_", " ")}?`)}
+            disabled={loading}
+          >
+            <span>Check Rain Shield</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ── Research Suggestion Chips ───────────────────────────── */}
+      <div className="suggestions-scroll-strip">
+        <span className="strip-title">Quick Inquiries:</span>
+        {RESEARCH_PROMPTS.map((prompt, i) => (
           <button
             key={i}
-            className="prompt-chip"
+            className="suggestion-pill"
             onClick={() => handleSend(prompt)}
             disabled={loading}
           >
-            <Sparkles size={13} className="text-cyan" />
+            <Sparkles size={12} className="text-cyan" />
             <span>{prompt}</span>
           </button>
         ))}
       </div>
 
-      {/* ── Chat Messages Scroll Area ───────────────────────────── */}
-      <div className="chat-messages-area">
+      {/* ── Messages Feed Area ──────────────────────────────────── */}
+      <div className="messages-scroll-viewport">
         {messages.map((m) => {
           const isUser = m.role === "user";
+          const isSpeaking = speakingId === m.id;
+          const isCopied = copiedId === m.id;
+
           return (
-            <div className={`message-bubble-row ${isUser ? "user-row" : "assistant-row"}`} key={m.id}>
+            <div
+              key={m.id}
+              className={`message-exchange-row ${isUser ? "user-exchange" : "bot-exchange"}`}
+            >
               {!isUser && (
-                <div className="message-avatar bot-avatar">
-                  <Bot size={18} />
+                <div className="sender-avatar bot-avatar">
+                  <Bot size={16} />
                 </div>
               )}
-              <div className={`message-bubble ${isUser ? "user-bubble" : "assistant-bubble"}`}>
-                <div className="message-meta-top">
-                  <span className="author-name">{isUser ? "You" : "WeatherGPT AI"}</span>
-                  <span className="message-time">{m.timestamp}</span>
-                </div>
-                <div className="message-text" dangerouslySetInnerHTML={{ __html: formatMarkdown(m.content) }}></div>
 
-                {/* Sources & Citations */}
+              <div className={`message-card-bubble ${isUser ? "user-bubble" : "bot-bubble"}`}>
+                <div className="message-header-line">
+                  <span className="sender-title">{isUser ? "User Query" : "WeatherGPT AI Grounding"}</span>
+                  <div className="msg-header-actions">
+                    {!isUser && (
+                      <>
+                        <button
+                          className={`audio-brief-btn ${isSpeaking ? "audio-active" : ""}`}
+                          onClick={() => handleToggleSpeak(m.id, m.content)}
+                          title={isSpeaking ? "Stop Voice Briefing" : "Listen to Voice Commute Briefing"}
+                        >
+                          {isSpeaking ? <VolumeX size={13} className="text-amber" /> : <Volume2 size={13} />}
+                          <span>{isSpeaking ? "Stop" : "Listen"}</span>
+                        </button>
+
+                        <button
+                          className="copy-pass-btn"
+                          onClick={() => handleCopyPass(m.id, m.content)}
+                          title="Copy Commute Intelligence Pass"
+                        >
+                          {isCopied ? <Check size={13} className="text-emerald" /> : <Copy size={13} />}
+                          <span>{isCopied ? "Copied" : "Pass"}</span>
+                        </button>
+                      </>
+                    )}
+                    <span className="timestamp font-mono">{m.timestamp}</span>
+                  </div>
+                </div>
+
+                <div
+                  className="prose-content"
+                  dangerouslySetInnerHTML={{ __html: formatStructuredMarkdown(m.content) }}
+                ></div>
+
+                {/* Grounding & Verification Drawer */}
                 {m.sources && m.sources.length > 0 && (
-                  <div className="citations-tray">
-                    <div className="citations-head">
-                      <ShieldCheck size={13} className="text-emerald" />
-                      <span>Retrieved Atmospheric Grounding:</span>
-                      <span className="confidence-pill">{Math.round((m.confidence || 0.95) * 100)}% Match</span>
+                  <div className="grounding-drawer">
+                    <div className="grounding-head">
+                      <ShieldCheck size={14} className="text-emerald" />
+                      <span>Retrieved Observational Telemetry</span>
+                      <span className="match-confidence-badge">
+                        {Math.round((m.confidence || 0.96) * 100)}% Confidence
+                      </span>
                     </div>
-                    <div className="sources-cards">
+
+                    <div className="citations-grid">
                       {m.sources.map((s, idx) => (
-                        <div className="source-card" key={idx}>
-                          <span className="source-title">{s.title || s.source}</span>
-                          <span className="source-data">{s.values || s.data}</span>
+                        <div className="citation-chip-box" key={idx}>
+                          <span className="cit-title">{s.title || s.source}</span>
+                          <span className="cit-val font-mono">{s.values || s.data}</span>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
               </div>
+
               {isUser && (
-                <div className="message-avatar user-avatar">
-                  <User size={18} />
+                <div className="sender-avatar user-avatar">
+                  <User size={16} />
                 </div>
               )}
             </div>
@@ -202,24 +413,28 @@ export default function ChatView({ location }) {
         })}
 
         {loading && (
-          <div className="message-bubble-row assistant-row">
-            <div className="message-avatar bot-avatar">
-              <Bot size={18} />
+          <div className="message-exchange-row bot-exchange">
+            <div className="sender-avatar bot-avatar">
+              <Bot size={16} />
             </div>
-            <div className="message-bubble assistant-bubble typing-bubble">
-              <span className="typing-dot"></span>
-              <span className="typing-dot"></span>
-              <span className="typing-dot"></span>
-              <span className="typing-text">Retrieving weather features & synthesizing RAG response...</span>
+            <div className="message-card-bubble bot-bubble typing-card">
+              <div className="pulse-dots-wrap">
+                <span className="pulse-dot"></span>
+                <span className="pulse-dot"></span>
+                <span className="pulse-dot"></span>
+              </div>
+              <span className="typing-notice">
+                Extracting entities, geocoding location & retrieving atmospheric features...
+              </span>
             </div>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* ── Input Box ───────────────────────────────────────────── */}
+      {/* ── Input Bar ───────────────────────────────────────────── */}
       <form
-        className="chat-input-bar"
+        className="chat-compose-form"
         onSubmit={(e) => {
           e.preventDefault();
           handleSend();
@@ -227,32 +442,87 @@ export default function ChatView({ location }) {
       >
         <input
           type="text"
-          placeholder={location ? `Ask WeatherGPT about ${location.name}...` : "Ask any meteorological question..."}
+          placeholder={
+            activeLoc
+              ? `Ask about ${activeLoc.name} or any city worldwide (e.g. Bangalore, Tokyo, Paris)...`
+              : "Ask any meteorological or travel weather question..."
+          }
           value={input}
           onChange={(e) => setInput(e.target.value)}
           disabled={loading}
           autoFocus
         />
-        <button type="submit" className="send-btn" disabled={loading || !input.trim()}>
-          <Send size={18} />
+        <button type="submit" className="compose-submit-btn" disabled={loading || !input.trim()}>
+          <Send size={16} />
+          <span>Send</span>
         </button>
       </form>
     </div>
   );
 }
 
-// Simple lightweight markdown formatter for bold, emojis, bullets, and breaks
-function formatMarkdown(text) {
+function formatStructuredMarkdown(text) {
   if (!text) return "";
-  let formatted = text
+
+  // 1. First extract and replace markdown tables with clean HTML tables
+  const tables = [];
+  const tableRegex = /((?:\|[^\n]+\|\r?\n?)+)/g;
+  let textWithoutTables = text.replace(tableRegex, (match) => {
+    const lines = match
+      .trim()
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((line) => line.startsWith("|") && line.endsWith("|"));
+    if (lines.length < 2) return match;
+
+    const isSeparator = /^\|(?:\s*:?-+:?\s*\|)+$/.test(lines[1]);
+    const headerLine = lines[0];
+    const dataLines = isSeparator ? lines.slice(2) : lines.slice(1);
+
+    const parseRow = (line, isHeader = false) => {
+      const cells = line.split("|").slice(1, -1);
+      const tag = isHeader ? "th" : "td";
+      return `<tr>${cells
+        .map((c) => {
+          const val = c.trim().replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+          return `<${tag}>${val}</${tag}>`;
+        })
+        .join("")}</tr>`;
+    };
+
+    const thead = `<thead>${parseRow(headerLine, true)}</thead>`;
+    const tbody = `<tbody>${dataLines.map((line) => parseRow(line, false)).join("")}</tbody>`;
+    const tableHtml = `<div class="chat-table-wrapper"><table class="chat-markdown-table">${thead}${tbody}</table></div>`;
+
+    const placeholder = `__TABLE_PLACEHOLDER_${tables.length}__`;
+    tables.push(tableHtml);
+    return `\n${placeholder}\n`;
+  });
+
+  // 2. Headings, dividers, strong, italics, list items
+  let clean = textWithoutTables
+    .replace(/^#### (.*$)/gim, "<h5>$1</h5>")
+    .replace(/^### (.*$)/gim, "<h4>$1</h4>")
+    .replace(/^## (.*$)/gim, "<h3>$1</h3>")
+    .replace(/^---$/gim, "<hr class='chat-divider'/>")
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.*?)\*/g, "<em>$1</em>")
-    .replace(/• (.*?)(?=\n|$)/g, "<li>$1</li>")
+    .replace(/^• (.*$)/gim, "<li>$1</li>")
+    .replace(/^- (.*$)/gim, "<li>$1</li>")
     .replace(/\n\n/g, "<br/><br/>")
     .replace(/\n/g, "<br/>");
 
-  if (formatted.includes("<li>")) {
-    formatted = formatted.replace(/(<li>.*?<\/li>)/gs, "<ul>$1</ul>");
+  if (clean.includes("<li>")) {
+    clean = clean.replace(/(<li>.*?<\/li>)/gs, "<ul>$1</ul>");
   }
-  return formatted;
+
+  // 3. Restore tables
+  tables.forEach((tHtml, idx) => {
+    clean = clean.replace(`__TABLE_PLACEHOLDER_${idx}__`, tHtml);
+    // Remove accidental <br/> wrapper directly around tables
+    clean = clean.replace(`<br/>${tHtml}<br/>`, tHtml);
+  });
+
+  return clean;
 }
+

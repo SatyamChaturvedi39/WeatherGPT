@@ -8,6 +8,7 @@ vector store health, and system latency.
 from fastapi import APIRouter
 import time
 from datetime import datetime, timezone
+from app.services.weather import WeatherService
 
 router = APIRouter()
 START_TIME = time.time()
@@ -19,6 +20,7 @@ async def get_system_metrics():
     Returns live system telemetry and operational status for Data-Ops monitoring.
     """
     uptime_sec = round(time.time() - START_TIME, 1)
+    quota_info = WeatherService.get_quota_telemetry()
 
     return {
         "status": "operational",
@@ -27,10 +29,15 @@ async def get_system_metrics():
         "services": {
             "open_meteo_api": {
                 "status": "healthy",
-                "tier": "Free Academic (10k calls/day)",
-                "calls_today": 42,
-                "quota_remaining": 9958,
-                "avg_latency_ms": 142.6,
+                "tier": "Free Academic (10,000 calls/day)",
+                "calls_today": quota_info["calls_used"],
+                "quota_remaining": quota_info["quota_remaining"],
+                "total_quota": quota_info["total_quota"],
+                "percent_available": quota_info["percent_available"],
+                "percent_used": quota_info["percent_used"],
+                "cache_hits": quota_info["cache_hits"],
+                "caching_efficiency": quota_info["caching_efficiency"],
+                "avg_latency_ms": WeatherService._last_latency_ms,
             },
             "ml_inference_engine": {
                 "status": "active",

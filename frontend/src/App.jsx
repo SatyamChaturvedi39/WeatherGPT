@@ -7,9 +7,10 @@ import {
   Server,
   Search,
   MapPin,
-  Sparkles,
-  Thermometer,
-  ShieldAlert,
+  Compass,
+  BrainCircuit,
+  Activity,
+  Layers,
 } from "lucide-react";
 import {
   geocodeLocation,
@@ -20,25 +21,32 @@ import {
 } from "./services/api";
 import DashboardView from "./components/DashboardView";
 import ChatView from "./components/ChatView";
+import RouteView from "./components/RouteView";
 import AlertsView from "./components/AlertsView";
+import BenchmarkView from "./components/BenchmarkView";
 import AdminView from "./components/AdminView";
+import MicroclimatesView from "./components/MicroclimatesView";
 import "./App.css";
 
 const DEFAULT_LOCATION = {
-  name: "London",
-  country: "United Kingdom",
-  latitude: 51.5074,
-  longitude: -0.1278,
-  admin1: "England",
+  name: "Bengaluru",
+  country: "India",
+  latitude: 12.9716,
+  longitude: 77.5946,
+  admin1: "Karnataka",
 };
 
-const POPULAR_LOCATIONS = [
-  { name: "London", country: "United Kingdom", latitude: 51.5074, longitude: -0.1278 },
-  { name: "New York", country: "United States", latitude: 40.7128, longitude: -74.006 },
-  { name: "Tokyo", country: "Japan", latitude: 35.6895, longitude: 139.6917 },
-  { name: "Paris", country: "France", latitude: 48.8566, longitude: 2.3522 },
-  { name: "San Francisco", country: "United States", latitude: 37.7749, longitude: -122.4194 },
-  { name: "Mumbai", country: "India", latitude: 19.076, longitude: 72.8777 },
+const OPERATIONAL_HUBS = [
+  { name: "Bengaluru", country: "India", latitude: 12.9716, longitude: 77.5946 },
+  { name: "Vimanapura (HAL)", country: "India", latitude: 12.9560, longitude: 77.6740 },
+  { name: "Koramangala", country: "India", latitude: 12.9352, longitude: 77.6245 },
+  { name: "Whitefield", country: "India", latitude: 12.9698, longitude: 77.7499 },
+  { name: "Electronic City", country: "India", latitude: 12.8452, longitude: 77.6602 },
+  { name: "Indiranagar", country: "India", latitude: 12.9784, longitude: 77.6408 },
+  { name: "Mumbai", country: "India", latitude: 19.0760, longitude: 72.8777 },
+  { name: "Delhi NCR", country: "India", latitude: 28.6139, longitude: 77.2090 },
+  { name: "Hyderabad", country: "India", latitude: 17.3850, longitude: 78.4867 },
+  { name: "Chennai", country: "India", latitude: 13.0827, longitude: 80.2707 },
 ];
 
 function LocationSearch({ onSelect, currentLocation }) {
@@ -63,23 +71,23 @@ function LocationSearch({ onSelect, currentLocation }) {
 
   return (
     <div className="location-search-wrapper">
-      <div className="search-bar glass-panel">
-        <Search size={18} className="search-icon" />
+      <div className="search-input-shell">
+        <Search size={16} className="search-icon" />
         <input
           type="text"
-          placeholder="Search any global city (e.g., Tokyo, Zurich, Austin)..."
+          placeholder="Search Indian stations or Bangalore microclimates (e.g., Vimanapura, Koramangala, Delhi, Mumbai)..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSearch()}
           onFocus={() => results.length > 0 && setShowDropdown(true)}
         />
-        <button className="search-btn" onClick={handleSearch} disabled={loading}>
+        <button className="search-submit-btn" onClick={handleSearch} disabled={loading}>
           {loading ? "..." : "Search"}
         </button>
       </div>
 
       {showDropdown && results.length > 0 && (
-        <ul className="search-results-dropdown glass-panel">
+        <ul className="search-results-dropdown">
           {results.map((r, i) => (
             <li
               key={i}
@@ -129,10 +137,10 @@ function MainApp() {
   const tempUnit = unit === "C" ? "C" : "F";
   const speedUnit = unit === "C" ? "km/h" : "mph";
 
-  // Fetch meteorological models on location change
+  // Fetch meteorological telemetry on station change
   useEffect(() => {
     if (!location) return;
-    const fetchAllData = async () => {
+    const fetchStationData = async () => {
       setLoading(true);
       setError(null);
       try {
@@ -147,89 +155,110 @@ function MainApp() {
         setDaily(dayRes.data);
         setAlertsCount((alertRes.alerts || []).filter((a) => a.severity !== "LOW").length);
       } catch (err) {
-        setError(err.message || "Failed to fetch atmospheric models");
+        setError(err.message || "Failed to fetch atmospheric telemetry");
       } finally {
         setLoading(false);
       }
     };
-    fetchAllData();
+    fetchStationData();
   }, [location]);
 
   return (
-    <div className="app-shell">
-      {/* ── Top Navigation Bar ──────────────────────────────────── */}
-      <header className="top-navbar glass-panel">
-        <div className="brand-group" onClick={() => navigate("/")} style={{ cursor: "pointer" }}>
-          <div className="brand-logo-glow">
-            <Cloud size={24} className="text-cyan" />
+    <div className="app-viewport">
+      {/* ── Top Persistent Navigation Bar ─────────────────────── */}
+      <header className="top-navigation-bar">
+        <div className="brand-logo-cluster" onClick={() => navigate("/")} style={{ cursor: "pointer" }}>
+          <div className="brand-icon-box">
+            <Cloud size={20} className="text-cyan" />
           </div>
-          <div>
-            <span className="brand-title">WeatherGPT</span>
-            <span className="brand-badge">AI METEOROLOGY</span>
+          <div className="brand-title-wrap">
+            <span className="brand-name">WeatherGPT</span>
+            <span className="brand-sub font-mono">ENTERPRISE XAI PLATFORM</span>
           </div>
         </div>
 
         <LocationSearch onSelect={setLocation} currentLocation={location} />
 
-        <div className="nav-controls">
-          <div className="unit-toggle-pill glass-panel-sm">
+        <div className="header-controls-cluster">
+          <div className="unit-toggle-control">
             <button
-              className={`unit-btn ${unit === "C" ? "active-unit" : ""}`}
+              className={`toggle-unit-btn ${unit === "C" ? "unit-selected" : ""}`}
               onClick={() => setUnit("C")}
             >
               °C
             </button>
             <button
-              className={`unit-btn ${unit === "F" ? "active-unit" : ""}`}
+              className={`toggle-unit-btn ${unit === "F" ? "unit-selected" : ""}`}
               onClick={() => setUnit("F")}
             >
               °F
             </button>
           </div>
+
+          <div className="pipeline-telemetry-badge font-mono">
+            <span className="live-status-dot"></span>
+            <span>142ms • LIVE</span>
+          </div>
         </div>
       </header>
 
-      {/* ── Sub-header: Quick City Chips ────────────────────────── */}
-      <div className="city-chips-bar">
-        <span className="chips-label">Popular Locations:</span>
-        <div className="chips-scroll">
-          {POPULAR_LOCATIONS.map((loc, i) => (
+      {/* ── Operational Station Selector Strip ─────────────────── */}
+      <div className="operational-stations-strip">
+        <span className="strip-label">OPERATIONAL HUBS:</span>
+        <div className="hubs-scroll-row">
+          {OPERATIONAL_HUBS.map((hub, i) => (
             <button
               key={i}
-              className={`city-chip ${location?.name === loc.name ? "active-chip" : ""}`}
-              onClick={() => setLocation(loc)}
+              className={`hub-pill-btn ${location?.name === hub.name ? "hub-selected" : ""}`}
+              onClick={() => setLocation(hub)}
             >
-              <MapPin size={12} />
-              <span>{loc.name}</span>
+              <MapPin size={11} />
+              <span>{hub.name}</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* ── Navigation Tabs ─────────────────────────────────────── */}
-      <nav className="tab-navigation">
-        <NavLink to="/" end className={({ isActive }) => `nav-tab ${isActive ? "active-tab" : ""}`}>
-          <Cloud size={18} />
-          <span>Dashboard</span>
+      {/* ── Main Section Tabs ─────────────────────────────────── */}
+      <nav className="main-section-tabs">
+        <NavLink to="/" end className={({ isActive }) => `section-tab ${isActive ? "tab-active" : ""}`}>
+          <Cloud size={16} />
+          <span>Forecast Intelligence</span>
         </NavLink>
-        <NavLink to="/chat" className={({ isActive }) => `nav-tab ${isActive ? "active-tab" : ""}`}>
-          <MessageSquare size={18} />
-          <span>AI Assistant</span>
-          <span className="tab-pill-badge">RAG</span>
+        <NavLink to="/chat" className={({ isActive }) => `section-tab ${isActive ? "tab-active" : ""}`}>
+          <MessageSquare size={16} />
+          <span>Conversational RAG</span>
+          <span className="tag-pill-sm">NLP</span>
         </NavLink>
-        <NavLink to="/alerts" className={({ isActive }) => `nav-tab ${isActive ? "active-tab" : ""}`}>
-          <AlertTriangle size={18} />
-          <span>Risk & Alerts</span>
-          {alertsCount > 0 && <span className="tab-alert-badge">{alertsCount}</span>}
+        <NavLink to="/route" className={({ isActive }) => `section-tab ${isActive ? "tab-active" : ""}`}>
+          <Compass size={16} />
+          <span>Corridor Route Transit</span>
+          <span className="tag-pill-commercial">Commercial</span>
         </NavLink>
-        <NavLink to="/admin" className={({ isActive }) => `nav-tab ${isActive ? "active-tab" : ""}`}>
-          <Server size={18} />
+        <NavLink to="/microclimates" className={({ isActive }) => `section-tab ${isActive ? "tab-active" : ""}`}>
+          <Layers size={16} />
+          <span>Bengaluru 25-Zone Grid</span>
+          <span className="tag-pill-hyperlocal">Hyper-Local</span>
+        </NavLink>
+        <NavLink to="/alerts" className={({ isActive }) => `section-tab ${isActive ? "tab-active" : ""}`}>
+          <AlertTriangle size={16} />
+          <span>Hazard & Risk Center</span>
+          {alertsCount > 0 && <span className="alert-count-pill">{alertsCount}</span>}
+        </NavLink>
+        <NavLink to="/benchmarks" className={({ isActive }) => `section-tab ${isActive ? "tab-active" : ""}`}>
+          <BrainCircuit size={16} />
+          <span>ML Validation Lab</span>
+          <span className="tag-pill-capstone">Member 1</span>
+        </NavLink>
+        <NavLink to="/admin" className={({ isActive }) => `section-tab ${isActive ? "tab-active" : ""}`}>
+          <Server size={16} />
           <span>Data-Ops Telemetry</span>
+          <span className="tag-pill-capstone">Member 2</span>
         </NavLink>
       </nav>
 
-      {/* ── Main View Container ─────────────────────────────────── */}
-      <main className="main-viewport">
+      {/* ── Dynamic Route Viewport ─────────────────────────────── */}
+      <main className="content-container">
         <Routes>
           <Route
             path="/"
@@ -250,17 +279,43 @@ function MainApp() {
               />
             }
           />
-          <Route path="/chat" element={<ChatView location={location} />} />
+          <Route
+            path="/chat"
+            element={<ChatView location={location} onUpdateLocation={setLocation} />}
+          />
+          <Route
+            path="/route"
+            element={
+              <RouteView
+                unit={unit}
+                convertTemp={convertTemp}
+                convertSpeed={convertSpeed}
+                tempUnit={tempUnit}
+                speedUnit={speedUnit}
+              />
+            }
+          />
+          <Route
+            path="/microclimates"
+            element={
+              <MicroclimatesView
+                onSelectLocation={setLocation}
+                convertTemp={convertTemp}
+                tempUnit={tempUnit}
+              />
+            }
+          />
           <Route path="/alerts" element={<AlertsView location={location} />} />
+          <Route path="/benchmarks" element={<BenchmarkView />} />
           <Route path="/admin" element={<AdminView />} />
         </Routes>
       </main>
 
-      {/* ── Global Footer ───────────────────────────────────────── */}
-      <footer className="global-footer">
-        <div className="footer-content">
-          <span>WeatherGPT • Academic Project Plan Architecture (100% Free Tier Implementation)</span>
-          <span>Open-Meteo • Neon PostgreSQL • ChromaDB • FastAPI • React + Recharts</span>
+      {/* ── Global Technical Footer ─────────────────────────────── */}
+      <footer className="technical-footer">
+        <div className="footer-meta-line font-mono">
+          <span>WeatherGPT • Final-Year MSc (AI & ML) Capstone Demonstration Architecture</span>
+          <span>Open-Meteo • TreeSHAP • Isolation Forest • Quantile Regressors • Neon PostgreSQL • FastAPI</span>
         </div>
       </footer>
     </div>

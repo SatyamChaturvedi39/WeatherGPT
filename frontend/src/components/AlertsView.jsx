@@ -11,15 +11,20 @@ import {
   History,
   CheckCircle2,
   RefreshCw,
+  Car,
+  Plane,
+  Building2,
+  SlidersHorizontal,
 } from "lucide-react";
 import { getAlerts, getAlertHistory } from "../services/api";
 
 export default function AlertsView({ location }) {
   const [alerts, setAlerts] = useState([]);
   const [summary, setSummary] = useState({ EXTREME: 0, HIGH: 0, MODERATE: 0, LOW: 0 });
+  const [activities, setActivities] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState("ALL"); // 'ALL' | 'EXTREME' | 'HIGH' | 'MODERATE' | 'LOW'
+  const [severityFilter, setSeverityFilter] = useState("ALL"); // 'ALL' | 'EXTREME' | 'HIGH' | 'MODERATE' | 'LOW'
 
   const fetchAlertsData = async () => {
     if (!location) return;
@@ -31,6 +36,7 @@ export default function AlertsView({ location }) {
       ]);
       setAlerts(alertsRes.alerts || []);
       setSummary(alertsRes.summary || { EXTREME: 0, HIGH: 0, MODERATE: 0, LOW: 0 });
+      setActivities(alertsRes.activity_suitability || null);
       setHistory(historyRes.history || []);
     } catch (err) {
       console.error("Failed to load alerts", err);
@@ -45,143 +51,131 @@ export default function AlertsView({ location }) {
 
   if (!location) {
     return (
-      <div className="empty-state">
-        <AlertTriangle size={64} className="text-amber" />
-        <h2>Select a location to inspect active risk alerts</h2>
-        <p>Weather risk assessment is calculated for specific geographical coordinates.</p>
+      <div className="empty-state-card">
+        <AlertTriangle size={48} className="text-amber" />
+        <h3>Select a Station to Evaluate Risk</h3>
+        <p>Atmospheric hazard assessments require geographical coordinates.</p>
       </div>
     );
   }
 
   const filteredAlerts = alerts.filter((a) => {
-    if (filter === "ALL") return true;
-    return a.severity === filter;
+    if (severityFilter === "ALL") return true;
+    return a.severity === severityFilter;
   });
 
-  const getSeverityIcon = (type) => {
-    switch (type) {
-      case "extreme_heat":
-      case "heat_wave":
-        return <Flame size={20} className="text-rose" />;
-      case "severe_thunderstorm":
-      case "heavy_rain":
-      case "moderate_rain":
-        return <CloudRain size={20} className="text-cyan" />;
-      case "extreme_cold":
-      case "frost_warning":
-        return <Snowflake size={20} className="text-cyan" />;
-      case "destructive_wind":
-      case "high_wind":
-        return <Wind size={20} className="text-blue" />;
-      default:
-        return <CheckCircle2 size={20} className="text-emerald" />;
-    }
-  };
-
   return (
-    <div className="alerts-container">
+    <div className="alerts-layout-stack">
       {/* ── Top Bar ────────────────────────────────────────────── */}
-      <div className="alerts-header glass-panel">
-        <div>
-          <h2>Atmospheric Hazard & Risk Engine</h2>
-          <p className="subtext">
-            Continuous anomaly monitoring for <strong>{location.name}</strong> • Isolation Forest + Physical Thresholds
+      <div className="section-hero-card">
+        <div className="hero-text-col">
+          <div className="eyebrow-pill">
+            <ShieldAlert size={13} />
+            <span>MEMBER 1 & 2 DELIVERABLE: RISK & ANOMALY ENGINE</span>
+          </div>
+          <h2>Atmospheric Hazard & Anomaly Alert Center</h2>
+          <p className="hero-subtext">
+            Continuous surveillance combining meteorological threshold models with Isolation Forest
+            residual anomaly scoring for <strong>{location.name}</strong>.
           </p>
         </div>
-        <button className="refresh-btn" onClick={fetchAlertsData} disabled={loading}>
+
+        <button className="primary-action-btn" onClick={fetchAlertsData} disabled={loading}>
           <RefreshCw size={15} className={loading ? "spin" : ""} />
-          <span>Refresh Analysis</span>
+          <span>Poll Live Sensors</span>
         </button>
       </div>
 
-      {/* ── Severity Stat Counter Cards ────────────────────────── */}
-      <div className="severity-summary-row">
+      {/* ── Severity Count Strip ─────────────────────────────────── */}
+      <div className="severity-metric-row">
         <div
-          className={`stat-card stat-extreme ${filter === "EXTREME" ? "active-stat" : ""}`}
-          onClick={() => setFilter(filter === "EXTREME" ? "ALL" : "EXTREME")}
+          className={`severity-box ${severityFilter === "EXTREME" ? "severity-selected" : ""}`}
+          onClick={() => setSeverityFilter(severityFilter === "EXTREME" ? "ALL" : "EXTREME")}
         >
-          <span className="stat-title">EXTREME HAZARDS</span>
-          <span className="stat-number text-rose">{summary.EXTREME || 0}</span>
-          <span className="stat-hint">Life-safety risk</span>
+          <span className="sev-title">EXTREME HAZARDS</span>
+          <span className="sev-num text-rose font-mono">{summary.EXTREME || 0}</span>
+          <span className="sev-desc">Immediate life-safety risk</span>
         </div>
+
         <div
-          className={`stat-card stat-high ${filter === "HIGH" ? "active-stat" : ""}`}
-          onClick={() => setFilter(filter === "HIGH" ? "ALL" : "HIGH")}
+          className={`severity-box ${severityFilter === "HIGH" ? "severity-selected" : ""}`}
+          onClick={() => setSeverityFilter(severityFilter === "HIGH" ? "ALL" : "HIGH")}
         >
-          <span className="stat-title">HIGH ADVISORIES</span>
-          <span className="stat-number text-orange">{summary.HIGH || 0}</span>
-          <span className="stat-hint">Significant disruption</span>
+          <span className="sev-title">HIGH ADVISORIES</span>
+          <span className="sev-num text-orange font-mono">{summary.HIGH || 0}</span>
+          <span className="sev-desc">Operational disruption</span>
         </div>
+
         <div
-          className={`stat-card stat-mod ${filter === "MODERATE" ? "active-stat" : ""}`}
-          onClick={() => setFilter(filter === "MODERATE" ? "ALL" : "MODERATE")}
+          className={`severity-box ${severityFilter === "MODERATE" ? "severity-selected" : ""}`}
+          onClick={() => setSeverityFilter(severityFilter === "MODERATE" ? "ALL" : "MODERATE")}
         >
-          <span className="stat-title">MODERATE ALERTS</span>
-          <span className="stat-number text-amber">{summary.MODERATE || 0}</span>
-          <span className="stat-hint">Precautionary</span>
+          <span className="sev-title">MODERATE ADVISORIES</span>
+          <span className="sev-num text-amber font-mono">{summary.MODERATE || 0}</span>
+          <span className="sev-desc">Precautionary measures</span>
         </div>
+
         <div
-          className={`stat-card stat-low ${filter === "LOW" ? "active-stat" : ""}`}
-          onClick={() => setFilter(filter === "LOW" ? "ALL" : "LOW")}
+          className={`severity-box ${severityFilter === "LOW" ? "severity-selected" : ""}`}
+          onClick={() => setSeverityFilter(severityFilter === "LOW" ? "ALL" : "LOW")}
         >
-          <span className="stat-title">FAVORABLE STATUS</span>
-          <span className="stat-number text-emerald">{summary.LOW || 0}</span>
-          <span className="stat-hint">Calm conditions</span>
+          <span className="sev-title">FAVORABLE BASELINE</span>
+          <span className="sev-num text-emerald font-mono">{summary.LOW || 0}</span>
+          <span className="sev-desc">Normal meteorological limits</span>
         </div>
       </div>
 
-      {/* ── Active Alerts List ──────────────────────────────────── */}
-      <div className="alerts-section">
-        <div className="section-header-row">
-          <h3>Active Risk Assessments ({filteredAlerts.length})</h3>
-          {filter !== "ALL" && (
-            <button className="clear-filter-btn" onClick={() => setFilter("ALL")}>
-              Reset Filter ({filter}) ✕
+      {/* ── Active Risk Banner Stack ─────────────────────────────── */}
+      <div className="active-alerts-section">
+        <div className="card-top-header">
+          <div>
+            <h3>Active Sensor Risk Evaluations ({filteredAlerts.length})</h3>
+            <span className="subtext">Threshold-triggered and anomaly-residual flagged events</span>
+          </div>
+
+          {severityFilter !== "ALL" && (
+            <button className="subtle-btn" onClick={() => setSeverityFilter("ALL")}>
+              Reset Filter ({severityFilter}) ✕
             </button>
           )}
         </div>
 
         {loading ? (
-          <div className="loading-state">
-            <div className="loading-ring"></div>
+          <div className="loading-state-panel">
+            <div className="spinner-orbit"></div>
             <p>Evaluating atmospheric risk surfaces...</p>
           </div>
         ) : filteredAlerts.length === 0 ? (
-          <div className="glass-panel empty-alert-box">
-            <ShieldCheck size={36} className="text-emerald" />
-            <h4>No active warnings for this filter category</h4>
-            <p>Atmospheric telemetry indicates safe operating baselines.</p>
+          <div className="all-clear-banner">
+            <CheckCircle2 size={24} className="text-emerald" />
+            <div>
+              <h4>All Atmospheric Parameters Within Standard Operating Envelopes</h4>
+              <p className="text-muted">No anomalies detected for the selected severity criteria.</p>
+            </div>
           </div>
         ) : (
-          <div className="alerts-cards-stack">
+          <div className="alerts-cards-list">
             {filteredAlerts.map((alert, i) => (
-              <div className={`alert-banner-card glass-panel alert-border-${alert.severity.toLowerCase()}`} key={i}>
-                <div className="alert-card-header">
-                  <div className="alert-type-icon">{getSeverityIcon(alert.alert_type)}</div>
-                  <div className="alert-meta-col">
-                    <div className="alert-badge-row">
-                      <span className={`badge-pill badge-${alert.severity.toLowerCase()}`}>
-                        {alert.severity} RISK
-                      </span>
-                      <span className="engine-source-pill">Engine: {alert.triggered_by}</span>
-                      <span className="confidence-pill">Confidence: {Math.round((alert.confidence || 0.95) * 100)}%</span>
-                    </div>
-                    <h3 className="alert-title-text">{alert.title}</h3>
+              <div key={i} className={`alert-record-card card-${alert.severity.toLowerCase()}`}>
+                <div className="alert-meta-top">
+                  <div className="alert-badges-row">
+                    <span className={`sev-tag tag-${alert.severity.toLowerCase()}`}>
+                      {alert.severity} RISK
+                    </span>
+                    <span className="engine-tag font-mono">Engine: {alert.triggered_by}</span>
+                    <span className="conf-tag font-mono">Confidence: {Math.round((alert.confidence || 0.95) * 100)}%</span>
                   </div>
-                </div>
-
-                <p className="alert-desc-text">{alert.description}</p>
-
-                <div className="action-advice-box">
-                  <span className="advice-label">Recommended Action:</span>
-                  <span className="advice-text">{alert.recommendation}</span>
-                </div>
-
-                <div className="alert-footer-meta">
-                  <span className="footer-tag">
-                    <Activity size={12} /> Anomaly Residual Score: {alert.anomaly_score}
+                  <span className="anomaly-z-tag font-mono">
+                    Residual Anomaly Score: {alert.anomaly_score}
                   </span>
-                  <span className="footer-tag">Status: Verified Active</span>
+                </div>
+
+                <h4 className="alert-title">{alert.title}</h4>
+                <p className="alert-narrative">{alert.description}</p>
+
+                <div className="actionable-checklist-box">
+                  <span className="chk-label">OPERATIONAL MITIGATION PROTOCOL:</span>
+                  <p className="chk-text">{alert.recommendation}</p>
                 </div>
               </div>
             ))}
@@ -189,27 +183,68 @@ export default function AlertsView({ location }) {
         )}
       </div>
 
-      {/* ── Historical Alerts Timeline ───────────────────────────── */}
-      {history.length > 0 && (
-        <div className="history-section glass-panel">
-          <div className="history-header">
-            <History size={18} className="text-blue" />
-            <h3>Past 7 Days Resolved Atmospheric Incidents</h3>
+      {/* ── Commercial Sector Operability Summary ───────────────── */}
+      {activities && (
+        <div className="commercial-operability-card">
+          <div className="card-top-header">
+            <h3>Commercial Sector Impact Matrix</h3>
+            <span className="subtext">Automated threshold assessment by industry application</span>
           </div>
-          <div className="history-timeline">
-            {history.map((h, i) => (
-              <div className="history-item" key={i}>
-                <div className="timeline-node"></div>
-                <div className="history-body">
-                  <div className="history-title-row">
-                    <span className="history-date">{h.date}</span>
-                    <span className={`mini-badge badge-${h.severity.toLowerCase()}`}>{h.severity}</span>
-                  </div>
-                  <p className="history-title">{h.title}</p>
-                  <p className="history-metric">Peak metric recorded: <strong>{h.peak_value}</strong> • Resolved</p>
+
+          <div className="activity-cards-grid">
+            {Object.entries(activities).map(([key, act]) => (
+              <div key={key} className="activity-operability-card">
+                <div className="act-header">
+                  <span className="font-mono text-cyan">{act.name}</span>
+                  <span className="act-score-tag tag-optimal font-mono">{act.score}/100 • {act.status}</span>
                 </div>
+                <ul className="act-advisories-list">
+                  {act.advisories.map((a, idx) => (
+                    <li key={idx}>• {a}</li>
+                  ))}
+                </ul>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Historical Events ───────────────────────────────────── */}
+      {history.length > 0 && (
+        <div className="historical-events-card">
+          <div className="card-top-header">
+            <div className="flex-align-gap">
+              <History size={16} className="text-muted" />
+              <h3>Resolved Incident History (Past 7 Days)</h3>
+            </div>
+            <span className="subtext">Post-event resolution telemetry</span>
+          </div>
+
+          <div className="history-table-wrap">
+            <table className="benchmark-table">
+              <thead>
+                <tr>
+                  <th>Event Date</th>
+                  <th>Severity</th>
+                  <th>Atmospheric Incident</th>
+                  <th>Peak Metric</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((h, i) => (
+                  <tr key={i}>
+                    <td className="font-mono">{h.date}</td>
+                    <td>
+                      <span className={`sev-tag tag-${h.severity.toLowerCase()}`}>{h.severity}</span>
+                    </td>
+                    <td><strong>{h.title}</strong></td>
+                    <td className="font-mono">{h.peak_value}</td>
+                    <td className="text-emerald">Resolved & Logged</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

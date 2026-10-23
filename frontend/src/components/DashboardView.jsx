@@ -19,13 +19,17 @@ import {
   Gauge,
   Sun,
   Eye,
-  Info,
-  TrendingUp,
   Sparkles,
   ShieldAlert,
   ChevronRight,
+  Car,
+  Activity,
+  Plane,
+  Building2,
+  CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
-import { getExplainForecast } from "../services/api";
+import { getExplainForecast, getAlerts, getAirQuality } from "../services/api";
 
 export default function DashboardView({
   current,
@@ -43,51 +47,53 @@ export default function DashboardView({
 }) {
   const [activeChart, setActiveChart] = useState("temp"); // 'temp' | 'precip' | 'wind'
   const [explainData, setExplainData] = useState(null);
-  const [explainLoading, setExplainLoading] = useState(false);
-  const [showExplainModal, setShowExplainModal] = useState(false);
+  const [activityData, setActivityData] = useState(null);
+  const [aqiData, setAqiData] = useState(null);
+  const [showExplain, setShowExplain] = useState(false);
 
   useEffect(() => {
     if (!location) return;
-    const fetchExplain = async () => {
-      setExplainLoading(true);
+    const fetchAuxData = async () => {
       try {
-        const res = await getExplainForecast(location.latitude, location.longitude);
-        setExplainData(res);
+        const [expRes, alertRes, aqiRes] = await Promise.all([
+          getExplainForecast(location.latitude, location.longitude),
+          getAlerts(location.latitude, location.longitude),
+          getAirQuality(location.latitude, location.longitude),
+        ]);
+        setExplainData(expRes);
+        setActivityData(alertRes.activity_suitability || null);
+        setAqiData(aqiRes?.data || null);
       } catch (e) {
-        console.error("Explainability load failed", e);
-      } finally {
-        setExplainLoading(false);
+        console.error("Auxiliary fetch error", e);
       }
     };
-    fetchExplain();
+    fetchAuxData();
   }, [location]);
 
   if (!location) {
     return (
-      <div className="empty-state">
-        <div className="empty-icon-glow">
-          <Cloud size={64} />
-        </div>
-        <h2>Select or search a location to begin</h2>
-        <p>Choose one of the quick locations above or search any city across the globe for real-time AI weather intelligence.</p>
+      <div className="empty-state-card">
+        <Cloud size={48} className="text-muted" />
+        <h3>Select a Meteorological Station</h3>
+        <p>Choose an operational hub from the top bar or search any city globally.</p>
       </div>
     );
   }
 
   if (loading) {
     return (
-      <div className="loading-state">
-        <div className="loading-ring"></div>
-        <p>Retrieving high-resolution atmospheric models...</p>
+      <div className="loading-state-panel">
+        <div className="spinner-orbit"></div>
+        <p>Ingesting atmospheric observations & running quantile inference...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="error-banner">
-        <ShieldAlert size={20} />
-        <span>Weather Data Ingestion Error: {error}</span>
+      <div className="system-error-banner">
+        <ShieldAlert size={18} />
+        <span>Telemetry Ingestion Exception: {error}</span>
       </div>
     );
   }
@@ -99,7 +105,7 @@ export default function DashboardView({
   const apparentTemp = convertTemp(curr.apparent_temperature);
   const windVal = convertSpeed(curr.wind_speed_10m);
 
-  // Prepare hourly data for Recharts (24 hours)
+  // Chart data points
   const chartData = (hourly?.hourly || []).slice(0, 24).map((pt) => {
     const timeLabel = new Date(pt.time).toLocaleTimeString([], { hour: "numeric" });
     const rawT = pt.temperature_2m ?? 0;
@@ -111,7 +117,6 @@ export default function DashboardView({
       temp: convertTemp(rawT),
       tempLower: convertTemp(rawLower),
       tempUpper: convertTemp(rawUpper),
-      uncertaintyBand: [convertTemp(rawLower), convertTemp(rawUpper)],
       precipProb: pt.precipitation_probability ?? 0,
       precipMm: pt.precipitation ?? 0,
       windSpeed: convertSpeed(pt.wind_speed_10m ?? 0),
@@ -120,136 +125,161 @@ export default function DashboardView({
   });
 
   return (
-    <div className="dashboard-content">
-      {/* ── Top Hero: Current Weather + Atmospheric Highlights ──────── */}
-      <div className="hero-grid">
-        <div className="current-card glass-panel glow-card">
-          <div className="current-header">
-            <div>
-              <span className="live-pill">
-                <span className="live-dot"></span> LIVE TELEMETRY
+    <div className="dashboard-layout-stack">
+      {/* ── Atmospheric Station Overview ────────────────────────── */}
+      <div className="station-hero-card">
+        <div className="station-meta-col">
+          <div className="station-top-tag">
+            <span className="live-status-dot"></span>
+            <span className="station-code">STATION METAR • {current.location?.elevation || 0}m ASL</span>
+          </div>
+          <h2 className="station-name">
+            {location.name}
+            {location.country ? `, ${location.country}` : ""}
+          </h2>
+          <p className="station-coords font-mono text-muted">
+            {location.latitude.toFixed(2)}°N, {location.longitude.toFixed(2)}°E • TZ: {current.location?.timezone || "UTC"}
+          </p>
+
+          <div className="thermal-readout-row">
+            <div className="primary-readout">
+              <span className="reading-value font-mono">{currentTemp}°</span>
+              <span className="reading-unit">{tempUnit}</span>
+            </div>
+            <div className="secondary-readout">
+              <span className="apparent-label">Apparent Heat Index</span>
+              <span className="apparent-value font-mono">
+                {apparentTemp}°{tempUnit}
               </span>
-              <h2 className="location-name">
-                {location.name}
-                {location.country ? `, ${location.country}` : ""}
-              </h2>
-              <p className="timezone-text">{current.location?.timezone || "UTC"} • Elev: {current.location?.elevation || 0}m</p>
-            </div>
-            <button
-              className="explain-chip"
-              onClick={() => setShowExplainModal(!showExplainModal)}
-              title="Explain how ML predicted this forecast"
-            >
-              <Sparkles size={14} />
-              <span>Why this forecast?</span>
-            </button>
-          </div>
-
-          <div className="current-display">
-            <div className="temp-cluster">
-              <span className="main-temp">{currentTemp}°</span>
-              <span className="unit-label">{tempUnit}</span>
-            </div>
-            <div className="condition-summary">
-              <span className="feels-like">Feels like <strong>{apparentTemp}°{tempUnit}</strong></span>
-              <span className="sub-note">Diurnal Peak Prob: {Math.max(...chartData.map((d) => d.temp))}°{tempUnit}</span>
-            </div>
-          </div>
-
-          <div className="quick-metrics-row">
-            <div className="metric-pill">
-              <Droplets size={16} className="text-cyan" />
-              <span>{curr.relative_humidity_2m}% Humidity</span>
-            </div>
-            <div className="metric-pill">
-              <Wind size={16} className="text-blue" />
-              <span>{windVal} {speedUnit} Wind</span>
-            </div>
-            <div className="metric-pill">
-              <Gauge size={16} className="text-amber" />
-              <span>{curr.surface_pressure} hPa</span>
-            </div>
-            <div className="metric-pill">
-              <Eye size={16} className="text-indigo" />
-              <span>{curr.cloud_cover}% Cloud Cover</span>
+              <span className="reading-subtext">
+                Diurnal Range: {Math.min(...chartData.map((d) => d.temp))}° - {Math.max(...chartData.map((d) => d.temp))}°{tempUnit}
+              </span>
             </div>
           </div>
         </div>
 
-        {/* AI Insight Card */}
-        <div className="ai-insight-card glass-panel">
-          <div className="card-top-row">
-            <div className="flex-align-gap">
-              <Sparkles size={18} className="text-accent" />
-              <h3>WeatherGPT Synopsis</h3>
+        {/* Physical Variables Quad */}
+        <div className="atmospheric-quad-grid">
+          <div className="quad-cell">
+            <Droplets size={16} className="text-cyan" />
+            <div className="quad-info">
+              <span className="quad-label">HUMIDITY</span>
+              <span className="quad-val font-mono">{curr.relative_humidity_2m}%</span>
+              <span className="quad-sub">Vapor Saturation</span>
             </div>
-            <button className="chat-link-btn" onClick={onNavigateToChat}>
-              Ask Chat <ChevronRight size={14} />
-            </button>
-          </div>
-          <p className="ai-summary-text">
-            Atmospheric conditions over {location.name} are influenced by{" "}
-            <strong>{curr.temperature_2m >= 18 ? "moderate surface warming" : "cool air subsidence"}</strong>{" "}
-            with barometric pressure at {curr.surface_pressure} hPa. Precipitation risk for the next 24 hours peaks at{" "}
-            <strong>{Math.max(...chartData.map((d) => d.precipProb), 0)}%</strong>.
-          </p>
-
-          <div className="insight-tags">
-            <span className="tag-chip">
-              <TrendingUp size={12} /> Probabilistic Confidence: 95%
-            </span>
-            <span className="tag-chip">
-              <Sun size={12} /> Diurnal Horizon: 48h
-            </span>
           </div>
 
-          {explainData && (
-            <div className="mini-shap-preview">
-              <span className="mini-label">Top Driving Feature:</span>
-              <span className="mini-val">
-                {explainData.features?.[0]?.feature} ({explainData.features?.[0]?.shap_value > 0 ? "+" : ""}
-                {explainData.features?.[0]?.shap_value}°C impact)
+          <div className="quad-cell">
+            <Wind size={16} className="text-blue" />
+            <div className="quad-info">
+              <span className="quad-label">WIND VELOCITY</span>
+              <span className="quad-val font-mono">
+                {windVal} {speedUnit}
               </span>
+              <span className="quad-sub">{curr.wind_direction_10m || 0}° Vector</span>
             </div>
-          )}
+          </div>
+
+          <div className="quad-cell">
+            <Gauge size={16} className="text-amber" />
+            <div className="quad-info">
+              <span className="quad-label">PRESSURE</span>
+              <span className="quad-val font-mono">{curr.surface_pressure} hPa</span>
+              <span className="quad-sub">Barometric Sea-Level</span>
+            </div>
+          </div>
+
+          <div className="quad-cell">
+            <Eye size={16} className="text-emerald" />
+            <div className="quad-info">
+              <span className="quad-label">CLOUD COVER</span>
+              <span className="quad-val font-mono">{curr.cloud_cover}%</span>
+              <span className="quad-sub">Optical Horizon</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* ── Explainability Drawer / Card (SHAP attributions) ──────────── */}
-      {showExplainModal && explainData && (
-        <div className="explain-panel glass-panel animate-fade-in">
-          <div className="panel-header">
-            <div className="flex-align-gap">
-              <Sparkles size={20} className="text-amber" />
-              <div>
-                <h3>Forecast Explainability (TreeSHAP Insights)</h3>
-                <p className="subtext">
-                  How model features contributed relative to base climatological temperature ({explainData.base_value}°C).
-                </p>
-              </div>
+      {/* ── Real-Time Air Quality & Commuter Respiratory Health ──────── */}
+      {aqiData && (
+        <div className="aqi-card-container">
+          <div className="aqi-main-col">
+            <div className="aqi-status-header">
+              <span className="aqi-badge-pill font-mono" style={{ borderColor: aqiData.color, color: aqiData.color }}>
+                AQI {aqiData.aqi} • {aqiData.category.toUpperCase()}
+              </span>
+              <span className="aqi-subtext">Dominant: {aqiData.dominant_pollutant}</span>
             </div>
-            <button className="close-btn" onClick={() => setShowExplainModal(false)}>✕</button>
+            <p className="aqi-advisory-text">
+              <strong>Commuter Health Notice:</strong> {aqiData.health_advisory}
+            </p>
           </div>
 
-          <div className="shap-feature-bars">
-            {explainData.features?.map((f, idx) => {
-              const isPositive = f.direction === "positive";
-              const barWidth = Math.min(100, Math.round((f.importance / 3.0) * 100));
+          <div className="aqi-pollutants-row">
+            <div className="pollutant-pill">
+              <span className="pol-label">PM2.5</span>
+              <span className="pol-val font-mono">{aqiData.pm2_5} µg/m³</span>
+            </div>
+            <div className="pollutant-pill">
+              <span className="pol-label">PM10</span>
+              <span className="pol-val font-mono">{aqiData.pm10} µg/m³</span>
+            </div>
+            <div className="pollutant-pill">
+              <span className="pol-label">NO₂</span>
+              <span className="pol-val font-mono">{aqiData.nitrogen_dioxide} µg/m³</span>
+            </div>
+            <div className="pollutant-pill">
+              <span className="pol-label">OZONE</span>
+              <span className="pol-val font-mono">{aqiData.ozone} µg/m³</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Commercial Activity Operability Matrix ──────────────── */}
+      {activityData && (
+        <div className="operability-matrix-card">
+          <div className="matrix-head">
+            <div className="matrix-title-wrap">
+              <Activity size={18} className="text-cyan" />
+              <h3>Commercial Activity Operability Matrix</h3>
+            </div>
+            <span className="matrix-sub">Threshold-weighted meteorological risk scores</span>
+          </div>
+
+          <div className="activity-cards-grid">
+            {Object.entries(activityData).map(([key, act]) => {
+              const isHigh = act.score >= 80;
+              const isMed = act.score >= 60;
+              const icon =
+                key === "commuting" ? (
+                  <Car size={18} />
+                ) : key === "running" ? (
+                  <Activity size={18} />
+                ) : key === "aviation_drone" ? (
+                  <Plane size={18} />
+                ) : (
+                  <Building2 size={18} />
+                );
+
               return (
-                <div className="shap-row" key={idx}>
-                  <div className="shap-meta">
-                    <span className="shap-name">{f.feature}</span>
-                    <span className={`shap-val ${isPositive ? "val-pos" : "val-neg"}`}>
-                      {isPositive ? "+" : ""}{f.shap_value} {explainData.units}
+                <div key={key} className="activity-operability-card">
+                  <div className="act-header">
+                    <div className="act-icon-wrap">{icon}</div>
+                    <span
+                      className={`act-score-tag ${
+                        isHigh ? "tag-optimal" : isMed ? "tag-favorable" : "tag-hazard"
+                      }`}
+                    >
+                      {act.score}/100 • {act.status}
                     </span>
                   </div>
-                  <div className="shap-bar-track">
-                    <div
-                      className={`shap-bar-fill ${isPositive ? "bar-pos" : "bar-neg"}`}
-                      style={{ width: `${barWidth}%` }}
-                    ></div>
-                  </div>
-                  <span className="shap-desc">{f.description}</span>
+                  <h4 className="act-name">{act.name}</h4>
+                  <ul className="act-advisories-list">
+                    {act.advisories.map((adv, idx) => (
+                      <li key={idx}>• {adv}</li>
+                    ))}
+                  </ul>
                 </div>
               );
             })}
@@ -258,27 +288,30 @@ export default function DashboardView({
       )}
 
       {/* ── Interactive Recharts Time-Series ───────────────────────── */}
-      <div className="chart-section glass-panel">
-        <div className="chart-toolbar">
+      <div className="visualizer-card">
+        <div className="visualizer-head">
           <div>
-            <h3>24-Hour Atmospheric Forecast</h3>
-            <p className="chart-subtext">Multi-horizon ML predictions with uncertainty intervals</p>
+            <h3>Probabilistic Predictive Horizon (Next 24h)</h3>
+            <p className="text-muted">
+              XGBoost Quantile Regressor calibrated with 95% Confidence Intervals
+            </p>
           </div>
-          <div className="chart-tab-group">
+
+          <div className="chart-mode-toggles">
             <button
-              className={`chart-tab ${activeChart === "temp" ? "active" : ""}`}
+              className={`mode-btn ${activeChart === "temp" ? "mode-active" : ""}`}
               onClick={() => setActiveChart("temp")}
             >
-              Temperature & Confidence
+              Temperature & Uncertainty Ribbon
             </button>
             <button
-              className={`chart-tab ${activeChart === "precip" ? "active" : ""}`}
+              className={`mode-btn ${activeChart === "precip" ? "mode-active" : ""}`}
               onClick={() => setActiveChart("precip")}
             >
               Precipitation Probability
             </button>
             <button
-              className={`chart-tab ${activeChart === "wind" ? "active" : ""}`}
+              className={`mode-btn ${activeChart === "wind" ? "mode-active" : ""}`}
               onClick={() => setActiveChart("wind")}
             >
               Wind Velocity
@@ -286,37 +319,37 @@ export default function DashboardView({
           </div>
         </div>
 
-        <div className="chart-container" style={{ width: "100%", height: 320 }}>
+        <div style={{ width: "100%", height: 320, marginTop: "1rem" }}>
           <ResponsiveContainer width="100%" height="100%">
             {activeChart === "temp" ? (
               <AreaChart data={chartData} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="tempGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.4} />
+                  <linearGradient id="tempStrokeGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.35} />
                     <stop offset="95%" stopColor="#38bdf8" stopOpacity={0.0} />
                   </linearGradient>
-                  <linearGradient id="uncertaintyGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#818cf8" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#818cf8" stopOpacity={0.05} />
+                  <linearGradient id="uncertaintyGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0.05} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
                 <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 12 }} />
-                <YAxis stroke="#64748b" tick={{ fontSize: 12 }} unit={`°`} />
+                <YAxis stroke="#64748b" tick={{ fontSize: 12 }} unit="°" />
                 <Tooltip
                   content={({ active, payload }) => {
                     if (active && payload && payload.length) {
-                      const data = payload[0].payload;
+                      const d = payload[0].payload;
                       return (
-                        <div className="chart-tooltip glass-panel">
-                          <p className="tooltip-time">{data.time}</p>
-                          <p className="tooltip-val text-cyan">
-                            Expected: <strong>{data.temp}°{tempUnit}</strong>
+                        <div className="chart-tooltip">
+                          <p className="font-bold">{d.time}</p>
+                          <p className="text-cyan font-mono">
+                            Expected: <strong>{d.temp}°{tempUnit}</strong>
                           </p>
-                          <p className="tooltip-range text-muted">
-                            95% CI: [{data.tempLower}° - {data.tempUpper}°{tempUnit}]
+                          <p className="text-muted font-mono">
+                            95% CI Ribbon: [{d.tempLower}° - {d.tempUpper}°{tempUnit}]
                           </p>
-                          <p className="tooltip-sub text-muted">Humidity: {data.humidity}%</p>
+                          <p className="text-muted">Relative Humidity: {d.humidity}%</p>
                         </div>
                       );
                     }
@@ -327,56 +360,48 @@ export default function DashboardView({
                   type="monotone"
                   dataKey="tempUpper"
                   stroke="transparent"
-                  fill="url(#uncertaintyGradient)"
-                  name="Uncertainty Upper"
+                  fill="url(#uncertaintyGrad)"
+                  name="Uncertainty Upper (P90)"
                 />
                 <Area
                   type="monotone"
                   dataKey="tempLower"
                   stroke="transparent"
                   fill="transparent"
-                  name="Uncertainty Lower"
+                  name="Uncertainty Lower (P10)"
                 />
                 <Area
                   type="monotone"
                   dataKey="temp"
                   stroke="#38bdf8"
-                  strokeWidth={3}
-                  fill="url(#tempGradient)"
-                  name="Temperature"
+                  strokeWidth={2.5}
+                  fill="url(#tempStrokeGrad)"
+                  name="Expected Temperature"
                 />
               </AreaChart>
             ) : activeChart === "precip" ? (
               <BarChart data={chartData} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="precipGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#06b6d4" stopOpacity={0.9} />
-                    <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.4} />
-                  </linearGradient>
-                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
                 <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 12 }} />
                 <YAxis stroke="#64748b" tick={{ fontSize: 12 }} unit="%" domain={[0, 100]} />
                 <Tooltip
                   content={({ active, payload }) => {
                     if (active && payload && payload.length) {
-                      const data = payload[0].payload;
+                      const d = payload[0].payload;
                       return (
-                        <div className="chart-tooltip glass-panel">
-                          <p className="tooltip-time">{data.time}</p>
-                          <p className="tooltip-val text-cyan">
-                            Rain Probability: <strong>{data.precipProb}%</strong>
+                        <div className="chart-tooltip">
+                          <p className="font-bold">{d.time}</p>
+                          <p className="text-cyan font-mono">
+                            Precipitation Probability: <strong>{d.precipProb}%</strong>
                           </p>
-                          <p className="tooltip-sub text-muted">
-                            Accumulation: {data.precipMm} mm
-                          </p>
+                          <p className="text-muted font-mono">Accumulation: {d.precipMm} mm</p>
                         </div>
                       );
                     }
                     return null;
                   }}
                 />
-                <Bar dataKey="precipProb" fill="url(#precipGradient)" radius={[4, 4, 0, 0]} name="Rain Probability %" />
+                <Bar dataKey="precipProb" fill="#0284c7" radius={[4, 4, 0, 0]} name="Rain Probability %" />
               </BarChart>
             ) : (
               <LineChart data={chartData} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
@@ -386,12 +411,12 @@ export default function DashboardView({
                 <Tooltip
                   content={({ active, payload }) => {
                     if (active && payload && payload.length) {
-                      const data = payload[0].payload;
+                      const d = payload[0].payload;
                       return (
-                        <div className="chart-tooltip glass-panel">
-                          <p className="tooltip-time">{data.time}</p>
-                          <p className="tooltip-val text-blue">
-                            Wind Speed: <strong>{data.windSpeed} {speedUnit}</strong>
+                        <div className="chart-tooltip">
+                          <p className="font-bold">{d.time}</p>
+                          <p className="text-blue font-mono">
+                            Wind Speed: <strong>{d.windSpeed} {speedUnit}</strong>
                           </p>
                         </div>
                       );
@@ -402,10 +427,9 @@ export default function DashboardView({
                 <Line
                   type="monotone"
                   dataKey="windSpeed"
-                  stroke="#60a5fa"
-                  strokeWidth={3}
+                  stroke="#3b82f6"
+                  strokeWidth={2.5}
                   dot={{ r: 3, fill: "#3b82f6" }}
-                  activeDot={{ r: 6 }}
                 />
               </LineChart>
             )}
@@ -413,42 +437,76 @@ export default function DashboardView({
         </div>
       </div>
 
-      {/* ── 7-Day Multi-Horizon Forecast ──────────────────────────── */}
-      {daily?.daily && (
-        <div className="forecast-section glass-panel">
-          <div className="section-head">
-            <h3>7-Day Multi-Horizon Weather Outlook</h3>
-            <span className="section-note">ECMWF / GFS Blended Predictions</span>
+      {/* ── TreeSHAP Explainability Section ──────────────────────── */}
+      {explainData && (
+        <div className="explainability-card">
+          <div className="card-top-header">
+            <div>
+              <h3>TreeSHAP Feature Attribution (Why this Forecast?)</h3>
+              <p className="subtext">
+                Shapley values decomposing temperature prediction relative to baseline climatology ({explainData.base_value}°C).
+              </p>
+            </div>
+            <button className="text-link-btn" onClick={() => setShowExplain(!showExplain)}>
+              {showExplain ? "Hide Drivers ▲" : "Inspect Drivers ▼"}
+            </button>
           </div>
 
-          <div className="daily-cards-grid">
+          <div className="shap-bars-container">
+            {explainData.features?.slice(0, showExplain ? undefined : 3).map((f, i) => {
+              const isPos = f.direction === "positive";
+              const barPct = Math.min(100, Math.round((f.importance / 3.0) * 100));
+
+              return (
+                <div key={i} className="shap-attribution-item">
+                  <div className="shap-line-info">
+                    <span className="feat-title">{f.feature}</span>
+                    <span className={`feat-val font-mono ${isPos ? "text-cyan" : "text-rose"}`}>
+                      {isPos ? "+" : ""}{f.shap_value} {explainData.units}
+                    </span>
+                  </div>
+                  <div className="shap-track-bg">
+                    <div
+                      className={`shap-fill-bar ${isPos ? "bar-cyan" : "bar-rose"}`}
+                      style={{ width: `${barPct}%` }}
+                    ></div>
+                  </div>
+                  <span className="feat-desc">{f.description}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── 7-Day Ensemble Outlook ──────────────────────────────── */}
+      {daily?.daily && (
+        <div className="multi-day-card">
+          <div className="card-top-header">
+            <h3>7-Day Synoptic Weather Outlook</h3>
+            <span className="subtext">ECMWF / GFS Blended Numerical Weather Prediction</span>
+          </div>
+
+          <div className="daily-grid-row">
             {daily.daily.map((day, i) => {
               const maxT = convertTemp(day.temperature_2m_max);
               const minT = convertTemp(day.temperature_2m_min);
               const precip = day.precipitation_probability_max ?? 0;
-              const dateObj = new Date(day.date);
-              const dayLabel = i === 0 ? "Today" : dateObj.toLocaleDateString("en", { weekday: "short" });
-              const dateNum = dateObj.toLocaleDateString("en", { month: "short", day: "numeric" });
+              const dObj = new Date(day.date);
+              const dayName = i === 0 ? "Today" : dObj.toLocaleDateString("en", { weekday: "short" });
+              const dateStr = dObj.toLocaleDateString("en", { month: "short", day: "numeric" });
 
               return (
-                <div className="day-card glass-panel-sm" key={i}>
-                  <div className="day-top">
-                    <span className="day-name-bold">{dayLabel}</span>
-                    <span className="day-subdate">{dateNum}</span>
+                <div key={i} className="day-forecast-cell">
+                  <span className="cell-day-name">{dayName}</span>
+                  <span className="cell-date font-mono">{dateStr}</span>
+                  <div className="cell-temps-row font-mono">
+                    <span className="high-temp">{maxT}°</span>
+                    <span className="low-temp">{minT}°</span>
                   </div>
-                  <div className="day-range-box">
-                    <span className="high-t">{maxT}°</span>
-                    <span className="low-t">{minT}°</span>
-                  </div>
-                  <div className="day-bar-indicator">
-                    <div
-                      className="precip-fill"
-                      style={{ width: `${Math.min(100, precip)}%` }}
-                    ></div>
-                  </div>
-                  <div className="day-precip-badge">
+                  <div className="cell-rain-indicator">
                     <Droplets size={12} className="text-cyan" />
-                    <span>{precip}%</span>
+                    <span className="font-mono">{precip}%</span>
                   </div>
                 </div>
               );

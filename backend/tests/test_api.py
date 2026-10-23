@@ -97,6 +97,75 @@ class TestForecastAPI:
         assert "features" in data
         assert len(data["features"]) > 0
 
+    def test_route_corridor(self):
+        """Route endpoint should interpolate and sample transit waypoints."""
+        response = client.get(
+            "/api/forecast/route",
+            params={"origin": "London", "destination": "Oxford", "steps": 3},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert "data" in data
+        assert "waypoints" in data["data"]
+        assert len(data["data"]["waypoints"]) == 3
+
+    def test_model_benchmarks(self):
+        """Benchmarks endpoint should return model comparison and ablation metrics."""
+        response = client.get("/api/forecast/benchmarks")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert "model_comparison" in data
+        assert len(data["model_comparison"]) >= 4
+
+    def test_route_corridor_with_transit_mode(self):
+        """Route endpoint should support transit_mode and compute vehicle physics."""
+        response = client.get(
+            "/api/forecast/route",
+            params={
+                "origin": "Vimanapura",
+                "destination": "Koramangala",
+                "steps": 4,
+                "transit_mode": "two_wheeler",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        r_data = data["data"]
+        assert "transit_mode" in r_data
+        assert "mode_guidance" in r_data
+        assert "stopping_distance_penalty_pct" in r_data
+
+    def test_air_quality_telemetry(self):
+        """AQI endpoint should return PM2.5, PM10, AQI index, and health advisory."""
+        response = client.get(
+            "/api/forecast/aqi",
+            params={"lat": 12.9716, "lon": 77.5946},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        aqi = data["data"]
+        assert "aqi" in aqi
+        assert "category" in aqi
+        assert "pm2_5" in aqi
+        assert "health_advisory" in aqi
+
+    def test_bangalore_microclimates(self):
+        """Bangalore microclimates endpoint should return all indexed zones with elevation & flood risk."""
+        response = client.get("/api/forecast/bangalore/microclimates")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["count"] >= 20
+        first = data["data"][0]
+        assert "name" in first
+        assert "elevation" in first
+        assert "flood_risk" in first
+        assert "aqi" in first
+
 
 class TestChatAPI:
     """Tests for chat endpoint."""
