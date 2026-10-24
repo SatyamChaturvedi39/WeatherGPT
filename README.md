@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # WeatherGPT
 
 **WeatherGPT** is a production-quality, explainable, uncertainty-aware weather intelligence platform. It turns raw meteorological telemetry into trustworthy, personalized outdoor and operational guidance.
@@ -89,3 +90,6 @@ weathergpt/
 ├── docs/                 # architecture.md, api.md, evaluation.md
 └── README.md
 ```
+=======
+# WeatherGPT
+>>>>>>> 5fd2eb8dbe7cce7739a44db1baf95af23338cd62
