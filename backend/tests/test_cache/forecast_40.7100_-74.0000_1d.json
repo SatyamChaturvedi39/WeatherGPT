@@ -1,0 +1,1 @@
+{"latitude": 40.71, "longitude": -74.0, "hourly": {"time": ["2025-06-01T00:00", "2025-06-01T01:00"], "temperature_2m": [22.5, 21.8], "precipitation": [0.0, 0.2], "relative_humidity_2m": [65.0, 68.0], "pressure_msl": [1015.2, 1014.8], "wind_speed_10m": [12.0, 10.5], "cloud_cover": [20.0, 30.0]}}

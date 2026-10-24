@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: weathergpt-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: weathergpt
+      POSTGRES_PASSWORD: weathergpt_pass
+      POSTGRES_DB: weathergpt
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U weathergpt -d weathergpt"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: weathergpt-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://weathergpt:weathergpt_pass@db:5432/weathergpt
+      - APP_ENV=production
+      - DEBUG=false
+      - ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000,http://frontend:80
+    ports:
+      - "8000:8000"
+    volumes:
+      - backend_models:/app/models_store
+      - backend_chroma:/app/chroma_db
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: weathergpt-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+volumes:
+  pgdata:
+  backend_models:
+  backend_chroma:
