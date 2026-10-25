@@ -64,10 +64,6 @@ WeatherGPT/
 │   ├── bengaluru_hourly_2021_2024.csv  # 26,208 hourly meteorological records
 │   ├── ingestion.py          # Data ingestion script
 │   └── schema.sql            # Time-series relational schema
-├── PROJECT_AUDIT.md          # Complete pre-repair audit and verification findings
-├── PROJECT_REPAIR_LOG.md     # Chronological log of changes, derivations, and test logs
-├── WeatherGPT_Final_Technical_Report.md # Canonical technical report
-├── WeatherGPT_Technical_Architecture_and_Division_of_Work.md # Team division of work & architecture
 └── README.md
 ```
 

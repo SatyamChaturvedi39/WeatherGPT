@@ -67,4 +67,9 @@ desktop.ini
 logs/
 
 
-WeatherGPT_Project_Plan.docx
+WeatherGPT_Project_Plan.docx
+
+# ── Local Reports, Audits & Architecture Documents ───────────
+WeatherGPT_*.md
+FINAL_*.md
+PROJECT_*.md
