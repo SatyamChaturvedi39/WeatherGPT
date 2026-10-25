@@ -8,7 +8,10 @@ Handles all communication with the Open-Meteo API for:
 """
 
 import time
+from datetime import datetime, timezone
+from typing import Optional
 import httpx
+import numpy as np
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -163,6 +166,113 @@ class WeatherService:
         }
         self._cache[cache_key] = (now, result)
         return result
+
+    async def get_recent_history_for_features(self, lat: float, lon: float) -> Optional[dict]:
+        """
+        Fetch recent past atmospheric telemetry (past 48 hours) from Open-Meteo Forecast API
+        (`past_days=2`) to construct autoregressive lags and rolling statistics for ML inference.
+        Note: Open-Meteo documentation specifies that `past_days` on the Forecast API provides
+        recently archived numerical weather prediction (NWP) model runs, not physical station observations.
+        """
+        cache_key = f"history_features:{round(lat, 3)}:{round(lon, 3)}"
+        now = time.time()
+        if cache_key in self._cache:
+            c_time, c_data = self._cache[cache_key]
+            if now - c_time < 900:  # 15 minutes TTL
+                WeatherService._cache_hits_count += 1
+                return c_data
+
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "hourly": [
+                "temperature_2m",
+                "relative_humidity_2m",
+                "surface_pressure",
+                "wind_speed_10m",
+                "cloud_cover",
+            ],
+            "past_days": 2,
+            "forecast_days": 1,
+            "timezone": "UTC",
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(f"{self.base_url}/forecast", params=params)
+                response.raise_for_status()
+                data = response.json()
+
+            WeatherService._api_calls_count += 1
+            hourly = data.get("hourly", {})
+            temps = hourly.get("temperature_2m", [])
+            hums = hourly.get("relative_humidity_2m", [])
+            press = hourly.get("surface_pressure", [])
+            winds = hourly.get("wind_speed_10m", [])
+            clouds = hourly.get("cloud_cover", [])
+            times = hourly.get("time", [])
+
+            if len(temps) < 48 or len(hums) < 48 or len(press) < 48 or len(winds) < 48 or len(clouds) < 48:
+                return None
+
+            # Find current index in UTC timeline (past_days=2 means index ~48 is current hour)
+            now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00")
+            if now_iso in times:
+                idx = times.index(now_iso)
+            else:
+                idx = min(48, len(temps) - 1)
+
+            if idx < 48:
+                return None
+
+            t_series = temps[idx - 48: idx + 1]
+            p_series = press[idx - 48: idx + 1]
+            h_series = hums[idx - 48: idx + 1]
+            w_series = winds[idx - 48: idx + 1]
+            cl_series = clouds[idx - 48: idx + 1]
+
+            past_t = t_series[:-1]  # strictly prior to time t
+            past_p = p_series[:-1]
+
+            roll_6h_t = past_t[-6:]
+            roll_24h_t = past_t[-24:]
+
+            feats = {
+                "temp_lag_1h": float(t_series[-2]),
+                "temp_lag_2h": float(t_series[-3]),
+                "temp_lag_3h": float(t_series[-4]),
+                "temp_lag_6h": float(t_series[-7]),
+                "temp_lag_12h": float(t_series[-13]),
+                "temp_lag_24h": float(t_series[-25]),
+                "temp_lag_48h": float(t_series[-49]),
+                "humidity_lag_1h": float(h_series[-2]),
+                "humidity_lag_6h": float(h_series[-7]),
+                "humidity_lag_24h": float(h_series[-25]),
+                "pressure_lag_1h": float(p_series[-2]),
+                "pressure_lag_3h": float(p_series[-4]),
+                "pressure_lag_24h": float(p_series[-25]),
+                "temp_roll_6h_mean": float(np.mean(roll_6h_t)),
+                "temp_roll_6h_std": float(np.std(roll_6h_t, ddof=1) if len(roll_6h_t) > 1 else 0.5),
+                "temp_roll_24h_mean": float(np.mean(roll_24h_t)),
+                "temp_roll_24h_std": float(np.std(roll_24h_t, ddof=1) if len(roll_24h_t) > 1 else 1.0),
+                "temp_roll_24h_min": float(np.min(roll_24h_t)),
+                "temp_roll_24h_max": float(np.max(roll_24h_t)),
+                "pressure_diff_1h": float(p_series[-1] - p_series[-2]),
+                "pressure_diff_3h": float(p_series[-1] - p_series[-4]),
+                "temp_diff_1h": float(t_series[-1] - t_series[-2]),
+                "temp_diff_3h": float(t_series[-1] - t_series[-4]),
+                "current_synoptic_obs": {
+                    "temperature_2m": float(t_series[-1]),
+                    "relative_humidity_2m": float(h_series[-1]),
+                    "surface_pressure": float(p_series[-1]),
+                    "wind_speed_10m": float(w_series[-1]),
+                    "cloud_cover": float(cl_series[-1]),
+                }
+            }
+            self._cache[cache_key] = (now, feats)
+            return feats
+        except Exception:
+            return None
 
     async def get_daily_forecast(self, lat: float, lon: float, days: int = 7) -> dict:
         """
@@ -719,17 +829,23 @@ class WeatherService:
         else:
             raincoat_advisory = "🌤️ NO RAINCOAT REQUIRED: The corridor currently displays dry surface conditions with low precipitation risk."
 
-        # Multi-modal vehicle physics calculations
+        # Multi-modal vehicle physics calculations (Theoretical AASHTO contact dynamics)
+        # Alert urban rider speed v = 45 km/h = 12.5 m/s, driver reaction time t_r = 1.17 s (explicit modeling assumption)
+        # Reaction distance: d_react = 12.5 * 1.17 = 14.625 m (~14.6 m)
+        # Dry braking (mu=0.70, g=9.807): d_brake = 12.5^2 / (2 * 0.70 * 9.807) = 11.380 m -> d_dry = 26.005 m (~26.0 m)
+        # Wet braking (mu=0.35, g=9.807): d_brake = 12.5^2 / (2 * 0.35 * 9.807) = 22.761 m -> d_wet = 37.386 m (~37.4 m)
+        # Percentage increase: (37.386 - 26.005) / 26.005 * 100% = +43.76% (~+43.8%)
         if mode_key in ["two_wheeler", "scooter", "bike", "motorcycle"]:
-            stopping_distance_penalty_pct = 38 if raincoat_needed else 0
+            stopping_distance_penalty_pct = 43.8 if raincoat_needed else 0.0
             mode_guidance = (
-                "Wet asphalt friction drops from μ=0.70 to μ=0.35 (braking distance increases by +38%). "
-                "Pack rain poncho/raincoat, wear helmet with clear anti-fog visor, and avoid lane white-paint markings which become extremely slick."
+                "Theoretical contact dynamics: wet asphalt friction drops from μ=0.70 to μ=0.35, "
+                "increasing stopping distance from 26.0m to 37.4m (+43.8% increase based on standard AASHTO formulation). "
+                "Pack rain poncho/raincoat, wear helmet with clear anti-fog visor, and avoid lane white-paint markings."
                 if raincoat_needed else
                 "Road surface friction is nominal (μ≈0.72). Standard two-wheeler riding gear is appropriate."
             )
         elif mode_key in ["auto_cab", "auto", "cab", "taxi", "uber", "ola"]:
-            stopping_distance_penalty_pct = 25 if raincoat_needed else 0
+            stopping_distance_penalty_pct = 25.0 if raincoat_needed else 0.0
             mode_guidance = (
                 f"Rain traffic congestion adds ~{int(round((rain_delay_factor - 1.0) * est_drive_mins))} mins delay. "
                 "Expect ride-hailing surge pricing around Domlur, Ejipura, and Koramangala. Keep car windows up to avoid bus spray."
@@ -737,14 +853,14 @@ class WeatherService:
                 "Traffic moving at standard arterial speeds. Low likelihood of rain surges."
             )
         elif mode_key in ["pedestrian", "walk", "walking"]:
-            stopping_distance_penalty_pct = 0
+            stopping_distance_penalty_pct = 0.0
             mode_guidance = (
                 "Carry a sturdy storm umbrella or hooded waterproof jacket. Beware of vehicle water splashes near Sony World and low curb sidewalks."
                 if raincoat_needed else
                 "Pleasant walking weather. Sidewalks and footpaths are dry."
             )
         else:
-            stopping_distance_penalty_pct = 28 if raincoat_needed else 0
+            stopping_distance_penalty_pct = 28.0 if raincoat_needed else 0.0
             mode_guidance = (
                 "Maintain speed below 45 km/h to prevent dynamic hydroplaning. Turn on defogger and avoid entering submerged underpasses at Ejipura/Sony World."
                 if raincoat_needed else
@@ -763,7 +879,21 @@ class WeatherService:
             "safety_status": safety_status,
             "raincoat_needed": raincoat_needed,
             "raincoat_advisory": raincoat_advisory,
-            "stopping_distance_penalty_pct": stopping_distance_penalty_pct,
+            "stopping_distance_penalty_pct": round(stopping_distance_penalty_pct, 1),
+            "contact_physics": {
+                "dry_stopping_distance_m": 26.0,
+                "wet_stopping_distance_m": 37.4,
+                "increase_percentage": 43.8,
+                "friction_dry": 0.70,
+                "friction_wet": 0.35,
+                "assumed_speed_kmh": 45.0,
+                "reaction_time_seconds": 1.17,
+                "reaction_distance_m": 14.6,
+                "dry_braking_distance_m": 11.4,
+                "wet_braking_distance_m": 22.8,
+                "is_theoretical_model": True,
+                "disclaimer": "Theoretical contact dynamics based on standard AASHTO formulation; reaction time 1.17s is an explicit modeling assumption for an alert urban rider (AASHTO highway design standard uses 2.5s); friction coefficients are standard textbook asphalt approximations, not field-measured on Bengaluru roads."
+            },
             "mode_guidance": mode_guidance,
             "active_hazards": hazards,
             "waypoints": waypoints,
@@ -882,8 +1012,13 @@ class WeatherService:
             elev = loc["elevation"]
             elev_diff = elev - base_elevation
 
-            # Environmental lapse rate: -6.5 °C per 1000m
-            lapse_offset = -0.0065 * elev_diff
+            # Standardized Environmental Lapse Rate:
+            # Positive magnitude convention: Γ = +0.0065 °C/m (+6.5 °C per 1000m)
+            # Consistent formula: T_local = T_base - Γ * (z_local - z_base)
+            # Above base (z_local > 915m): negative offset (cooler)
+            # Below base (z_local < 915m): positive offset (warmer)
+            lapse_rate_magnitude = 0.0065
+            lapse_offset = -lapse_rate_magnitude * elev_diff
 
             # Urban Heat Island (UHI) adjustments:
             # High-density tech corridors retain heat (+1.2°C)
@@ -900,20 +1035,28 @@ class WeatherService:
             local_temp = round(base_temp + lapse_offset + uhi_offset, 1)
             local_humidity = min(98, max(30, int(round(base_humidity - (lapse_offset * 1.5)))))
 
-            # Precipitation odds and flood vulnerability
+            # Precipitation and contextual stormwater vulnerability
+            # NOTE: Macro NWP forecast delivers synoptic precipitation for the Bengaluru grid.
+            # We do NOT fabricate neighborhood-specific cloud vectors or artificial rainfall odds.
+            # Localities in low-lying basins retain their historical drainage vulnerability profiles.
             flood_risk = loc["flood_risk"]
-            is_rain_belt = any(r in k_lower for r in ["koramangala", "ejipura", "bellandur", "silk board", "marathahalli"])
-            
-            if is_rain_belt:
-                local_precip = round(base_precip + (0.8 if base_precip > 0 else 0.0), 1)
-                rain_prob = 68 if base_precip > 0 else 35
-                condition = "Convective Rain Risk" if rain_prob > 50 else "Passing Cloud Cover"
-            else:
-                local_precip = base_precip
-                rain_prob = 15 if base_precip == 0 else 30
-                condition = "Clear / Dry Surface" if rain_prob < 25 else "Scattered Clouds"
+            local_precip = base_precip
 
-            # Chokepoints
+            # Standard regional rain odds from base observation
+            if base_precip >= 2.5:
+                rain_prob = 85
+                condition = "Active Regional Rain"
+            elif base_precip > 0.1:
+                rain_prob = 60
+                condition = "Scattered Light Rain"
+            elif base_humidity > 80:
+                rain_prob = 35
+                condition = "Overcast / High Humidity"
+            else:
+                rain_prob = 15
+                condition = "Nominal / Dry Surface"
+
+            # Chokepoints (Historical stormwater drainage basins from BBMP flood audits)
             chokepoints = []
             if "koramangala" in k_lower:
                 chokepoints = ["Sony World Signal", "80ft Road Basin", "Ejipura Underpass"]
@@ -928,7 +1071,7 @@ class WeatherService:
             elif "whitefield" in k_lower:
                 chokepoints = ["ITPL Main Road", "Hope Farm Junction"]
 
-            # Local AQI parameterization
+            # Local AQI contextual traffic corridor estimates
             if any(p in k_lower for p in ["silk board", "whitefield", "marathahalli", "bellandur"]):
                 local_aqi = 125  # High traffic & road dust
             elif any(g in k_lower for g in ["jayanagar", "malleshwaram", "cubbon"]):
@@ -948,11 +1091,18 @@ class WeatherService:
                 "rain_probability": rain_prob,
                 "condition": condition,
                 "flood_risk": flood_risk,
+                "hazard_classification": f"Contextual Historical Vulnerability: {flood_risk}",
                 "chokepoints": chokepoints,
                 "aqi": local_aqi,
                 "latitude": loc["latitude"],
                 "longitude": loc["longitude"],
-                "raincoat_recommended": rain_prob >= 35 or local_precip > 0.0,
+                "raincoat_recommended": rain_prob >= 50 or local_precip > 0.1,
+                "scientific_provenance": {
+                    "temperature_method": "Environmental Lapse Rate: T_local = T_base - 0.0065 * (z_local - z_base) + UHI offset (relative to 915m ASL base)",
+                    "precipitation_source": "Open-Meteo Synoptic Forecast Grid (ECMWF/GFS)",
+                    "flood_metadata_source": "CAG 2021 Stormwater Performance Audit & KSNDMC Flood Vulnerability Maps",
+                    "is_live_flood_simulation": False
+                }
             })
 
         # Sort by flood risk severity (Critical -> Severe -> High -> Moderate -> Low)

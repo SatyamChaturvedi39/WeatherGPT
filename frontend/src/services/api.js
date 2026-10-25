@@ -51,6 +51,10 @@ export async function getExplainForecast(lat, lon) {
   return apiFetch(`/api/forecast/explain?lat=${lat}&lon=${lon}`);
 }
 
+export async function getMLPrediction(lat, lon) {
+  return apiFetch(`/api/forecast/ml-prediction?lat=${lat}&lon=${lon}`);
+}
+
 export async function getRouteForecast(origin, destination, steps = 5, transitMode = "two_wheeler") {
   return apiFetch(`/api/forecast/route?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&steps=${steps}&transit_mode=${encodeURIComponent(transitMode)}`);
 }
