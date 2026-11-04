@@ -4,30 +4,31 @@
 
 @layer base {
   :root {
-    --color-bg-app: #f8fafc;
+    /* Premium light panels — cool, airy, low-contrast surfaces */
+    --color-bg-app: #f3f6fb;
     --color-bg-surface: #ffffff;
-    --color-bg-subtle: #f1f5f9;
-    --color-bg-elevated: #ffffff;
-    --color-border-subtle: #e2e8f0;
-    --color-border-default: #cbd5e1;
-    --color-text-primary: #0f172a;
-    --color-text-secondary: #475569;
-    --color-text-muted: #64748b;
-    --color-accent: #2563eb;
-    --color-accent-hover: #1d4ed8;
-    --color-accent-subtle: #eff6ff;
+    --color-bg-subtle: #eef3fa;
+    --color-bg-elevated: rgba(255, 255, 255, 0.92);
+    --color-border-subtle: #e4eaf3;
+    --color-border-default: #d3dcea;
+    --color-text-primary: #0d1a33;
+    --color-text-secondary: #46546d;
+    --color-text-muted: #6b7890;
+    --color-accent: #3563f0;
+    --color-accent-hover: #2a50d0;
+    --color-accent-subtle: #edf2ff;
     --color-accent-fg: #ffffff;
 
     /* Risk tokens */
-    --color-risk-low: #059669;
-    --color-risk-low-bg: #ecfdf5;
-    --color-risk-low-border: #a7f3d0;
-    --color-risk-mod: #d97706;
-    --color-risk-mod-bg: #fffbeb;
-    --color-risk-mod-border: #fde68a;
-    --color-risk-high: #dc2626;
-    --color-risk-high-bg: #fef2f2;
-    --color-risk-high-border: #fecaca;
+    --color-risk-low: #0f8f6a;
+    --color-risk-low-bg: #ecfbf4;
+    --color-risk-low-border: #b8ecd6;
+    --color-risk-mod: #b9690b;
+    --color-risk-mod-bg: #fff8eb;
+    --color-risk-mod-border: #fbe1b0;
+    --color-risk-high: #d03232;
+    --color-risk-high-bg: #fff3f3;
+    --color-risk-high-border: #f9caca;
   }
 
   .dark {
@@ -78,6 +79,72 @@
   }
 }
 
+/* ─── Weather-tinted light panels ─────────────────────────────────────────────
+   App.tsx sets <html data-sky="…"> from the live weather; in light mode the
+   panel, background and border tokens shift to match the sky. */
+@layer base {
+  :root {
+    --sky-glow-a: rgba(125, 175, 255, 0.18);
+    --sky-glow-b: rgba(186, 160, 255, 0.12);
+  }
+  :root[data-sky="sunny"]:not(.dark) {
+    --color-bg-app: #f8ecd6; --color-bg-surface: #fff7ea; --color-bg-subtle: #f6e6c8;
+    --color-border-subtle: #efd9b0; --color-border-default: #e3c48d;
+    --sky-glow-a: rgba(255,176,64,0.34); --sky-glow-b: rgba(255,128,80,0.16);
+  }
+  :root[data-sky="partly"]:not(.dark) {
+    --color-bg-app: #ecf0f8; --color-bg-surface: #fdf8ee; --color-bg-subtle: #eef1f8;
+    --color-border-subtle: #e1e5ef; --color-border-default: #cdd5e4;
+    --sky-glow-a: rgba(255,196,110,0.28); --sky-glow-b: rgba(110,160,250,0.20);
+  }
+  :root[data-sky="cloudy"]:not(.dark) {
+    --color-bg-app: #e9ebf3; --color-bg-surface: #f5f6fb; --color-bg-subtle: #e6e8f1;
+    --color-border-subtle: #d9dce8; --color-border-default: #c6cbdb;
+    --sky-glow-a: rgba(140,150,185,0.28); --sky-glow-b: rgba(185,175,220,0.18);
+  }
+  :root[data-sky="fog"]:not(.dark) {
+    --color-bg-app: #e9eced; --color-bg-surface: #f6f7f7; --color-bg-subtle: #e5e8e9;
+    --color-border-subtle: #d7dcde; --color-border-default: #c3cacd;
+    --sky-glow-a: rgba(195,200,206,0.40); --sky-glow-b: rgba(165,175,182,0.22);
+  }
+  :root[data-sky="rain"]:not(.dark) {
+    --color-bg-app: #e1ebf8; --color-bg-surface: #eff5ff; --color-bg-subtle: #dee8f7;
+    --color-border-subtle: #cbdaf0; --color-border-default: #b2c7e6;
+    --sky-glow-a: rgba(70,140,230,0.30); --sky-glow-b: rgba(60,105,200,0.18);
+  }
+  :root[data-sky="storm"]:not(.dark) {
+    --color-bg-app: #e6e3f3; --color-bg-surface: #f4f2fc; --color-bg-subtle: #e3dff2;
+    --color-border-subtle: #d1cbea; --color-border-default: #b9b0da;
+    --sky-glow-a: rgba(115,90,205,0.30); --sky-glow-b: rgba(60,70,140,0.20);
+  }
+  :root[data-sky="snow"]:not(.dark) {
+    --color-bg-app: #e6f0f9; --color-bg-surface: #f7fbff; --color-bg-subtle: #e2edf7;
+    --color-border-subtle: #d0e1ef; --color-border-default: #b8d0e4;
+    --sky-glow-a: rgba(160,205,250,0.36); --sky-glow-b: rgba(215,232,255,0.30);
+  }
+  :root[data-sky="night"]:not(.dark) {
+    --color-bg-app: #e4e6f5; --color-bg-surface: #f2f3fd; --color-bg-subtle: #e2e5f5;
+    --color-border-subtle: #d2d6ee; --color-border-default: #bcc2e2;
+    --sky-glow-a: rgba(100,110,225,0.30); --sky-glow-b: rgba(165,120,225,0.18);
+  }
+}
+
+.app-shell {
+  background:
+    radial-gradient(1200px 520px at 85% -10%, var(--sky-glow-a), transparent 60%),
+    radial-gradient(900px 440px at -10% 0%, var(--sky-glow-b), transparent 60%),
+    var(--color-bg-app);
+  background-attachment: fixed;
+  transition: background-color 0.9s ease;
+}
+.app-shell .bg-app-surface,
+.app-shell .bg-app-subtle {
+  transition: background-color 0.9s ease, border-color 0.9s ease;
+}
+.dark .app-shell {
+  background: var(--color-bg-app);
+}
+
 /* Floating layer blur */
 .floating-layer {
   background-color: var(--color-bg-elevated);
@@ -97,3 +164,22 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ─── Landing page sky animations ─────────────────────────────────────────── */
+@keyframes wg-drift {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(110vw); }
+}
+@keyframes wg-twinkle {
+  0%, 100% { opacity: 0.25; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+@keyframes wg-spin { to { transform: rotate(360deg); } }
+@keyframes wg-fog {
+  0%, 100% { transform: translateX(-6%); }
+  50% { transform: translateX(6%); }
+}
+.wg-drift { animation: wg-drift linear infinite; will-change: transform; }
+.wg-twinkle { animation: wg-twinkle ease-in-out infinite; }
+.wg-spin-slow { animation: wg-spin 90s linear infinite; }
+.wg-fog { animation: wg-fog ease-in-out infinite; }

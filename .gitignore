@@ -1,53 +1,99 @@
-# Python
+# ── Python ────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
-env/
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+
+# ── Virtual environments ─────────────────────────────────────
 venv/
 .venv/
+env/
 ENV/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-/lib/
-/lib64/
+
+# ── IDE ──────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Environment variables ────────────────────────────────────
+.env
+.env.local
+.env.production
+
+# ── Node.js ──────────────────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/build/
+.npm/
+npm-debug.log*
+
+# ── Docker ───────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ── Data & Models (large files) ──────────────────────────────
+*.csv
+*.parquet
+*.h5
+*.pkl
+*.joblib
+*.pt
+*.pth
+ml/models/*.joblib
+ml/models/*.pkl
+ml/models/*.pt
+data/*.csv
+
+# ── ChromaDB persistence ────────────────────────────────────
+chroma_data/
+backend/cache/
+
+# ── Jupyter ──────────────────────────────────────────────────
+.ipynb_checkpoints/
+
+# ── OS ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Logs ─────────────────────────────────────────────────────
+*.log
+logs/
+
+
+WeatherGPT_Project_Plan.docx
+
+# ── Local Reports, Audits & Architecture Documents ───────────
+WeatherGPT_*.md
+FINAL_*.md
+PROJECT_*.md
+*.pptx
+create_presentation.py
+
+
+# ── Merged from feats_v2 ─────────────────────────────────────
+# keep frontend/src/lib (generic lib/ ignores elsewhere must not hide it)
 !frontend/src/lib/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+dist-ssr/
+*.local
+*.sqlite3
+*.db
 .pytest_cache/
 .coverage
 htmlcov/
-*.sqlite3
-*.db
-weathergpt.db
-!backend/weathergpt.db
 chroma_db/
 models_store/
 
-# Node
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-dist/
-dist-ssr/
-*.local
-
-# Environment & IDE
-.env
-.idea/
-.vscode/
-*.swp
-*.swo
-.DS_Store
+# Stray virtualenv created directly inside backend/ (use backend/.venv instead)
+backend/Lib/
+backend/Scripts/
+backend/Include/
+backend/pyvenv.cfg
+requirements-local.txt

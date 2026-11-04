@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { CloudSun, MapPin, Moon, Sun, Search, Check } from 'lucide-react';
 import { SavedLocation } from '../../types';
 import { Tooltip } from '../ui/Tooltip';
@@ -45,14 +46,14 @@ export const Navbar: React.FC<NavbarProps> = ({
     <header className="sticky top-0 z-40 w-full border-b border-border-subtle bg-app-surface/95 backdrop-blur-sm">
       <div className="max-w-content mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
         {/* Brand */}
-        <div className="flex items-center gap-2.5 shrink-0">
-          <div className="w-8 h-8 rounded-btn bg-app-subtle border border-border-default flex items-center justify-center text-accent">
+        <Link to="/" className="flex items-center gap-2.5 shrink-0" title="Back to home">
+          <div className="w-8 h-8 rounded-btn bg-gradient-to-br from-sky-400 to-indigo-500 shadow-sm flex items-center justify-center text-white">
             <CloudSun className="w-4 h-4 stroke-[1.75]" />
           </div>
           <span className="font-semibold text-sm tracking-tight text-text-primary">
             WeatherGPT
           </span>
-        </div>
+        </Link>
 
         {/* Center: Location Combobox */}
         <div className="relative flex-1 max-w-xs sm:max-w-sm" ref={dropdownRef}>

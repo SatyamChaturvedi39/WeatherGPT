@@ -11,6 +11,9 @@ export const CurrentWeatherSchema = z.object({
   pressure_msl: z.coerce.number().default(1013),
   wind_speed_10m: z.coerce.number().default(0),
   cloud_cover: z.coerce.number().default(0),
+  apparent_temperature: z.coerce.number().optional(),
+  weather_code: z.coerce.number().optional(),
+  is_day: z.coerce.number().optional(),
   is_anomaly: z.boolean().default(false),
   source: z.string().default('open-meteo'),
 });

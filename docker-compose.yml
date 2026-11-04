@@ -1,50 +1,50 @@
-version: '3.8'
+# ── WeatherGPT Local Development ──────────────────────────────
+# Run with: docker compose up
+#
+# Services:
+#   - backend: FastAPI on http://localhost:8000
+#   - db: PostgreSQL on localhost:5432 (for local dev only)
 
 services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://weathergpt:weathergpt@db:5432/weathergpt
+      - DEBUG=true
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app  # Hot reload in dev
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
   db:
-    image: postgres:15-alpine
-    container_name: weathergpt-db
-    restart: unless-stopped
+    image: postgres:16-alpine
     environment:
       POSTGRES_USER: weathergpt
-      POSTGRES_PASSWORD: weathergpt_pass
+      POSTGRES_PASSWORD: weathergpt
       POSTGRES_DB: weathergpt
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./data/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U weathergpt -d weathergpt"]
+      test: ["CMD-SHELL", "pg_isready -U weathergpt"]
       interval: 5s
       timeout: 5s
       retries: 5
-
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: weathergpt-backend
-    restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      - DATABASE_URL=postgresql+asyncpg://weathergpt:weathergpt_pass@db:5432/weathergpt
-      - APP_ENV=production
-      - DEBUG=false
-      - ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000,http://frontend:80
-    ports:
-      - "8000:8000"
-    volumes:
-      - backend_models:/app/models_store
-      - backend_chroma:/app/chroma_db
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: weathergpt-frontend
-    restart: unless-stopped
     depends_on:
       - backend
     ports:
@@ -52,5 +52,3 @@ services:
 
 volumes:
   pgdata:
-  backend_models:
-  backend_chroma:

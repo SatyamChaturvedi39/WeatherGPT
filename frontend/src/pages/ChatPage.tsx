@@ -63,6 +63,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ location, activity }) => {
         lat: location.lat,
         lon: location.lon,
         activity,
+        location_name: location.name,
       });
 
       const assistantMsg: ChatMessage = {

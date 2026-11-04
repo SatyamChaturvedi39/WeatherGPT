@@ -52,10 +52,11 @@ export default {
         DEFAULT: '8px',
         input: '8px',
         btn: '8px',
-        card: '12px',
+        card: '16px',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        display: ['"Instrument Serif"', 'Georgia', 'serif'],
       },
       fontSize: {
         '2xs': ['11px', '14px'],
@@ -70,8 +71,8 @@ export default {
       },
       boxShadow: {
         sm: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-        card: '0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.08)',
-        floating: '0 4px 12px 0 rgba(0, 0, 0, 0.12)',
+        card: '0 1px 2px 0 rgba(16, 32, 72, 0.04), 0 6px 20px -6px rgba(16, 32, 72, 0.08)',
+        floating: '0 12px 32px -8px rgba(16, 32, 72, 0.18)',
       },
     },
   },

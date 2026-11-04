@@ -58,3 +58,38 @@ export function useAdminStatus() {
     refetchInterval: 15000, // refresh admin health every 15s
   });
 }
+
+// ─── Feats-branch feature hooks ──────────────────────────────────────────────
+export function useRouteForecast(origin: string, destination: string, mode: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['route', origin, destination, mode],
+    queryFn: () => api.getRoute(origin, destination, mode),
+    enabled: enabled && origin.trim().length > 1 && destination.trim().length > 1,
+    staleTime: 1000 * 60 * 5,
+    retry: false,
+  });
+}
+
+export function useMicroclimates() {
+  return useQuery({ queryKey: ['microclimates'], queryFn: api.getMicroclimates, staleTime: 1000 * 60 * 10 });
+}
+
+export function useAlertsCenter(lat: number, lon: number) {
+  return useQuery({ queryKey: ['alerts-center', lat, lon], queryFn: () => api.getAlertsCenter(lat, lon), staleTime: 1000 * 60 * 5 });
+}
+
+export function useAlertHistory(lat: number, lon: number, days = 7) {
+  return useQuery({ queryKey: ['alert-history', lat, lon, days], queryFn: () => api.getAlertHistory(lat, lon, days), staleTime: 1000 * 60 * 30 });
+}
+
+export function useAirQuality(lat: number, lon: number) {
+  return useQuery({ queryKey: ['aqi', lat, lon], queryFn: () => api.getAirQuality(lat, lon), staleTime: 1000 * 60 * 15 });
+}
+
+export function useMlPrediction(lat: number, lon: number) {
+  return useQuery({ queryKey: ['ml-prediction', lat, lon], queryFn: () => api.getMlPrediction(lat, lon), staleTime: 1000 * 60 * 15, retry: false });
+}
+
+export function useBenchmarks() {
+  return useQuery({ queryKey: ['benchmarks'], queryFn: api.getBenchmarks, staleTime: Infinity });
+}

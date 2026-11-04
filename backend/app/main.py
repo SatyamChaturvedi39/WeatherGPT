@@ -1,82 +1,72 @@
-"""WeatherGPT FastAPI Application entrypoint."""
+"""
+WeatherGPT — FastAPI entry point.
+
+Brings together all routers, middleware, and startup/shutdown events.
+"""
+
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.exceptions import RequestValidationError
-from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.config import get_settings
-from app.core.logging import setup_logging
-from app.core.errors import (
-    AppError,
-    app_error_handler,
-    http_exception_handler,
-    validation_exception_handler,
-    unhandled_exception_handler,
-)
-from app.core.security import SimpleRateLimiterMiddleware
-from app.db.session import init_db
-from app.ingestion.scheduler import (
-    ensure_default_location,
-    start_scheduler,
-    shutdown_scheduler,
-)
-from app.api import api_router
+from app.core.config import get_settings
+from app.core.database import engine, Base
+from app.api import forecast, alerts, chat, settings as settings_router, admin
 
 settings = get_settings()
-logger = setup_logging(debug=settings.DEBUG)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan setup and teardown."""
-    logger.info("Initializing WeatherGPT database schema...")
-    await init_db()
-    logger.info("Ensuring default monitored location exists...")
-    await ensure_default_location()
-    logger.info("Starting ingestion scheduler...")
-    start_scheduler()
+    """Create database tables on startup if available."""
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as exc:
+        print(f"[Notice] Database initialization deferred: {exc}")
     yield
-    logger.info("Shutting down WeatherGPT ingestion scheduler...")
-    shutdown_scheduler()
 
 
 app = FastAPI(
     title=settings.APP_NAME,
-    version="0.1.0",
-    description="Explainable, uncertainty-aware weather intelligence platform API.",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    version=settings.APP_VERSION,
+    description="AI-powered weather forecasting with RAG chatbot, anomaly detection, and explainability.",
     lifespan=lifespan,
 )
 
-# 1. CORS Middleware
+# ── CORS ─────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 2. Rate Limiting and Security Headers Middleware
-app.add_middleware(SimpleRateLimiterMiddleware, max_requests=180, window_seconds=60)
-
-# 3. Standardized Exception Handlers
-app.add_exception_handler(AppError, app_error_handler)
-app.add_exception_handler(StarletteHTTPException, http_exception_handler)
-app.add_exception_handler(RequestValidationError, validation_exception_handler)
-app.add_exception_handler(Exception, unhandled_exception_handler)
-
-# 4. Include API Router
-app.include_router(api_router, prefix=settings.API_V1_STR)
+# ── Routers ──────────────────────────────────────────────────────
+app.include_router(forecast.router, prefix="/api/forecast", tags=["Forecast"])
+app.include_router(alerts.router, prefix="/api/alerts", tags=["Alerts"])
+app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
+app.include_router(settings_router.router, prefix="/api/settings", tags=["Settings"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
 
-@app.get("/", tags=["root"])
-async def root():
+# ── Health check ─────────────────────────────────────────────────
+@app.get("/health", tags=["System"])
+async def health_check():
+    """Simple health check endpoint for monitoring and keep-alive pings."""
     return {
-        "message": f"Welcome to {settings.APP_NAME} API v0.1.0",
+        "status": "healthy",
+        "service": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+    }
+
+
+@app.get("/", tags=["System"])
+async def root():
+    """Root endpoint with API information."""
+    return {
+        "service": settings.APP_NAME,
+        "version": settings.APP_VERSION,
         "docs": "/docs",
-        "health": f"{settings.API_V1_STR}/health",
+        "health": "/health",
     }

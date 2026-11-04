@@ -27,6 +27,7 @@ import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { Select } from '../components/ui/Select';
 import { ErrorState } from '../components/ui/ErrorState';
 import { PageHeader } from '../components/layout/PageHeader';
+import { AirQualityCard, MlPredictionCard } from '../components/dashboard/InsightCards';
 import {
   formatTemperature,
   formatPrecipitation,
@@ -246,12 +247,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               label="Barometric Pressure"
               value={pressureFormatted.value}
               unit={pressureFormatted.unit}
-              trendText="Sea-level normalized"
+              trendText="Surface (station level)"
               icon={<Compass className="w-4 h-4 stroke-[1.75]" />}
               loading={currentLoading}
             />
           </>
         )}
+      </div>
+
+      {/* 2b. Air quality + trained-model prediction (from Feats backend) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <AirQualityCard lat={location.lat} lon={location.lon} />
+        <MlPredictionCard lat={location.lat} lon={location.lon} />
       </div>
 
       {/* 3 & 5. Forecast Chart (8 cols) + "Why this forecast" SHAP Drivers (4 cols) */}

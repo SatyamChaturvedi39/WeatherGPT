@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MapPin, Loader2, LocateFixed, AlertTriangle } from 'lucide-react';
 import { Navbar } from './components/layout/Navbar';
@@ -9,8 +9,14 @@ import { ExplainabilityPage } from './pages/ExplainabilityPage';
 import { ChatPage } from './pages/ChatPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminPage } from './pages/AdminPage';
+import LandingPage from './landing/LandingPage';
+import { RoutePage } from './pages/RoutePage';
+import { MicroclimatesPage } from './pages/MicroclimatesPage';
+import { AlertsPage } from './pages/AlertsPage';
+import { BenchmarksPage } from './pages/BenchmarksPage';
 import { SavedLocation } from './types';
-import { usePlatformSettings } from './hooks/useWeather';
+import { usePlatformSettings, useCurrentWeather } from './hooks/useWeather';
+import { classifyCode } from './landing/weatherTheme';
 import { getBrowserCoords, reverseGeocode } from './lib/geolocation';
 
 const queryClient = new QueryClient({
@@ -33,9 +39,26 @@ const FALLBACK_LOCATION: SavedLocation = {
 
 type GeoState = 'detecting' | 'ready' | 'denied' | 'error';
 
+/** Sky mood used to tint light-mode panels (see index.css `data-sky`). */
+function skyMood(code: number | undefined, timestamp: string | undefined): string {
+  if (code == null) return 'partly';
+  const c = classifyCode(code);
+  const hour = Number(timestamp?.split('T')[1]?.slice(0, 2));
+  const night = Number.isFinite(hour) && (hour < 6 || hour >= 18);
+  if (c === 'drizzle' || c === 'rain') return 'rain';
+  if (c === 'storm' || c === 'snow' || c === 'fog') return c;
+  if (night) return 'night';
+  return c === 'clear' ? 'sunny' : c;
+}
+
 const AppContent: React.FC = () => {
+  // Light panels by default; the navbar toggle switches to dark and is remembered.
   const [darkMode, setDarkMode] = useState<boolean>(() => {
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    try {
+      return localStorage.getItem('weathergpt.theme') === 'dark';
+    } catch {
+      return false;
+    }
   });
 
   const [currentLocation, setCurrentLocation] = useState<SavedLocation>(FALLBACK_LOCATION);
@@ -93,7 +116,23 @@ const AppContent: React.FC = () => {
   // ─── Dark mode ───────────────────────────────────────────────────────────
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
+    try {
+      localStorage.setItem('weathergpt.theme', darkMode ? 'dark' : 'light');
+    } catch {
+      /* storage unavailable */
+    }
+    return () => document.documentElement.classList.remove('dark');
   }, [darkMode]);
+
+  // ─── Weather-tinted panels: map live conditions to a sky mood ───────────
+  const { data: liveWeather } = useCurrentWeather(currentLocation.latitude, currentLocation.longitude);
+  const sky = skyMood(liveWeather?.weather_code, liveWeather?.timestamp);
+  useEffect(() => {
+    document.documentElement.dataset.sky = sky;
+    return () => {
+      delete document.documentElement.dataset.sky;
+    };
+  }, [sky]);
 
   const activeActivity = settings?.active_activity || 'running';
   const savedLocations = settings?.saved_locations || [currentLocation];
@@ -134,7 +173,7 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-app-bg text-text-primary flex flex-col font-sans transition-colors duration-150">
+    <div className="app-shell min-h-screen bg-app-bg text-text-primary flex flex-col font-sans transition-colors duration-150">
       {/* Geolocation error / denied banner */}
       {(geoState === 'denied' || geoState === 'error') && geoError && (
         <div className="bg-risk-high-bg border-b border-risk-high-border px-4 py-2 flex items-center justify-between gap-3 text-xs text-risk-high">
@@ -174,11 +213,11 @@ const AppContent: React.FC = () => {
       />
 
       <div className="flex flex-1 max-w-content w-full mx-auto">
-        <Sidebar />
+        <Sidebar skyLabel={sky} />
         <main className="flex-1 p-4 sm:p-6 lg:p-8 pb-20 md:pb-8 overflow-x-hidden">
           <Routes>
             <Route
-              path="/"
+              path="/dashboard"
               element={
                 <DashboardPage
                   location={{
@@ -221,6 +260,18 @@ const AppContent: React.FC = () => {
             />
             <Route path="/settings" element={<SettingsPage onUseMyLocation={detectLocation} />} />
             <Route path="/admin" element={<AdminPage />} />
+            <Route
+              path="/alerts"
+              element={
+                <AlertsPage
+                  location={{ name: currentLocation.name, lat: currentLocation.latitude, lon: currentLocation.longitude }}
+                />
+              }
+            />
+            <Route path="/route" element={<RoutePage />} />
+            <Route path="/microclimates" element={<MicroclimatesPage />} />
+            <Route path="/benchmarks" element={<BenchmarksPage />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </main>
       </div>
@@ -232,7 +283,10 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <AppContent />
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/*" element={<AppContent />} />
+        </Routes>
       </BrowserRouter>
     </QueryClientProvider>
   );

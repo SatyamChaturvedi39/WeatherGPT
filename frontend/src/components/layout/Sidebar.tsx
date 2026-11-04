@@ -6,13 +6,21 @@ import {
   MessageSquare,
   Settings as SettingsIcon,
   ActivitySquare,
+  Navigation,
+  MapPinned,
+  Siren,
+  BarChart3,
 } from 'lucide-react';
 
-export const Sidebar: React.FC = () => {
+export const Sidebar: React.FC<{ skyLabel?: string }> = ({ skyLabel }) => {
   const navItems = [
-    { to: '/', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4 stroke-[1.75]" /> },
+    { to: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4 stroke-[1.75]" /> },
     { to: '/explainability', label: 'Explainability', icon: <BrainCircuit className="w-4 h-4 stroke-[1.75]" /> },
+    { to: '/alerts', label: 'Alerts', icon: <Siren className="w-4 h-4 stroke-[1.75]" /> },
+    { to: '/route', label: 'Route Shield', icon: <Navigation className="w-4 h-4 stroke-[1.75]" /> },
+    { to: '/microclimates', label: 'Microclimates', icon: <MapPinned className="w-4 h-4 stroke-[1.75]" /> },
     { to: '/chat', label: 'Weather Chat', icon: <MessageSquare className="w-4 h-4 stroke-[1.75]" /> },
+    { to: '/benchmarks', label: 'Benchmarks', icon: <BarChart3 className="w-4 h-4 stroke-[1.75]" /> },
     { to: '/settings', label: 'Settings', icon: <SettingsIcon className="w-4 h-4 stroke-[1.75]" /> },
     { to: '/admin', label: 'Admin & Ops', icon: <ActivitySquare className="w-4 h-4 stroke-[1.75]" /> },
   ];
@@ -53,6 +61,12 @@ export const Sidebar: React.FC = () => {
 
         {/* Footer info (version badge moved here) */}
         <div className="mt-auto pt-4 border-t border-border-subtle px-3 py-2 text-2xs text-text-muted space-y-1">
+          {skyLabel && (
+            <div className="flex items-center justify-between">
+              <span>Panel tint</span>
+              <span className="font-mono capitalize text-text-secondary">{skyLabel}</span>
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <span>Version</span>
             <span className="font-mono text-text-secondary">v0.1.0</span>
@@ -67,7 +81,7 @@ export const Sidebar: React.FC = () => {
       {/* Mobile Bottom Tab Bar */}
       <nav
         aria-label="Mobile Navigation"
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-app-surface/95 backdrop-blur-md border-t border-border-subtle px-1 py-1 flex justify-around"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-app-surface/95 backdrop-blur-md border-t border-border-subtle px-1 py-1 flex gap-1 overflow-x-auto"
       >
         {navItems.map((item) => (
           <NavLink
@@ -75,7 +89,7 @@ export const Sidebar: React.FC = () => {
             to={item.to}
             end={item.to === '/'}
             className={({ isActive }) =>
-              `flex flex-col items-center py-1.5 px-2 rounded-btn text-2xs font-medium transition-colors ${
+              `flex shrink-0 flex-col items-center py-1.5 px-2 min-w-[64px] rounded-btn text-2xs font-medium transition-colors ${
                 isActive ? 'text-accent font-semibold' : 'text-text-muted hover:text-text-primary'
               }`
             }
