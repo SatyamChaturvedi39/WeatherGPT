@@ -25,6 +25,17 @@ class WeatherService:
     _api_calls_count: int = 42
     _cache_hits_count: int = 156
     _last_latency_ms: float = 142.6
+    _http_client: Optional[httpx.AsyncClient] = None
+
+    @classmethod
+    def get_http_client(cls) -> httpx.AsyncClient:
+        """Reuse persistent async HTTP client connection pool with keep-alive."""
+        if cls._http_client is None or cls._http_client.is_closed:
+            cls._http_client = httpx.AsyncClient(
+                timeout=httpx.Timeout(12.0, connect=3.5),
+                limits=httpx.Limits(max_keepalive_connections=20, max_connections=40),
+            )
+        return cls._http_client
 
     def __init__(self):
         self.base_url = settings.OPEN_METEO_BASE_URL
@@ -276,16 +287,16 @@ class WeatherService:
 
     async def get_daily_forecast(self, lat: float, lon: float, days: int = 7) -> dict:
         """
-        Fetch daily forecast data.
-
-        Args:
-            lat: Latitude
-            lon: Longitude
-            days: Number of forecast days (max 16)
-
-        Returns:
-            dict with daily forecast data.
+        Fetch daily forecast data with 15-minute TTL caching.
         """
+        cache_key = f"daily:{round(lat, 3)}:{round(lon, 3)}:{days}"
+        now = time.time()
+        if cache_key in self._cache:
+            c_time, c_data = self._cache[cache_key]
+            if now - c_time < 900:  # 15 minutes TTL
+                WeatherService._cache_hits_count += 1
+                return c_data
+
         params = {
             "latitude": lat,
             "longitude": lon,
@@ -324,7 +335,7 @@ class WeatherService:
                     point[key] = daily[key][i] if i < len(daily[key]) else None
             day_points.append(point)
 
-        return {
+        res_daily = {
             "location": {
                 "latitude": data.get("latitude"),
                 "longitude": data.get("longitude"),
@@ -332,6 +343,147 @@ class WeatherService:
             },
             "daily": day_points,
             "units": units,
+        }
+        self._cache[cache_key] = (now, res_daily)
+        return res_daily
+
+    async def get_forecast_bundle(self, lat: float, lon: float, hours: int = 48, days: int = 7) -> dict:
+        """
+        Fetch current, hourly, and daily forecasts in a SINGLE bundled network request.
+        Populates in-memory cache for all three resources simultaneously.
+        """
+        curr_key = f"curr:{round(lat, 3)}:{round(lon, 3)}"
+        hour_key = f"hourly:{round(lat, 3)}:{round(lon, 3)}:{hours}"
+        day_key = f"daily:{round(lat, 3)}:{round(lon, 3)}:{days}"
+        now = time.time()
+
+        if curr_key in self._cache and hour_key in self._cache and day_key in self._cache:
+            c_curr_time, c_curr_data = self._cache[curr_key]
+            c_hour_time, c_hour_data = self._cache[hour_key]
+            c_day_time, c_day_data = self._cache[day_key]
+            if (now - c_curr_time < 300) and (now - c_hour_time < 900) and (now - c_day_time < 900):
+                WeatherService._cache_hits_count += 3
+                return {
+                    "current": c_curr_data,
+                    "hourly": c_hour_data,
+                    "daily": c_day_data,
+                }
+
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "current": [
+                "temperature_2m",
+                "relative_humidity_2m",
+                "apparent_temperature",
+                "precipitation",
+                "weather_code",
+                "wind_speed_10m",
+                "wind_direction_10m",
+                "surface_pressure",
+                "cloud_cover",
+            ],
+            "hourly": [
+                "temperature_2m",
+                "relative_humidity_2m",
+                "apparent_temperature",
+                "precipitation_probability",
+                "precipitation",
+                "weather_code",
+                "wind_speed_10m",
+                "wind_direction_10m",
+                "cloud_cover",
+                "visibility",
+                "uv_index",
+            ],
+            "daily": [
+                "temperature_2m_max",
+                "temperature_2m_min",
+                "apparent_temperature_max",
+                "apparent_temperature_min",
+                "precipitation_sum",
+                "precipitation_probability_max",
+                "weather_code",
+                "wind_speed_10m_max",
+                "sunrise",
+                "sunset",
+                "uv_index_max",
+            ],
+            "forecast_hours": hours,
+            "forecast_days": days,
+            "timezone": "auto",
+        }
+
+        client = self.get_http_client()
+        t_start = time.time()
+        response = await client.get(f"{self.base_url}/forecast", params=params)
+        response.raise_for_status()
+        data = response.json()
+
+        WeatherService._api_calls_count += 1
+        WeatherService._last_latency_ms = round((time.time() - t_start) * 1000, 1)
+
+        # 1. Parse Current
+        current_data = data.get("current", {})
+        curr_result = {
+            "location": {
+                "latitude": data.get("latitude"),
+                "longitude": data.get("longitude"),
+                "timezone": data.get("timezone"),
+                "elevation": data.get("elevation"),
+            },
+            "current": current_data,
+            "units": data.get("current_units", {}),
+            "timestamp": current_data.get("time"),
+        }
+        self._cache[curr_key] = (now, curr_result)
+
+        # 2. Parse Hourly
+        hourly = data.get("hourly", {})
+        time_points = []
+        times = hourly.get("time", [])
+        for i, t in enumerate(times):
+            point = {"time": t}
+            for key in hourly:
+                if key != "time":
+                    point[key] = hourly[key][i] if i < len(hourly[key]) else None
+            time_points.append(point)
+        hour_result = {
+            "location": {
+                "latitude": data.get("latitude"),
+                "longitude": data.get("longitude"),
+                "timezone": data.get("timezone"),
+            },
+            "hourly": time_points,
+            "units": data.get("hourly_units", {}),
+        }
+        self._cache[hour_key] = (now, hour_result)
+
+        # 3. Parse Daily
+        daily = data.get("daily", {})
+        day_points = []
+        d_times = daily.get("time", [])
+        for i, t in enumerate(d_times):
+            point = {"date": t}
+            for key in daily:
+                if key != "time":
+                    point[key] = daily[key][i] if i < len(daily[key]) else None
+            day_points.append(point)
+        day_result = {
+            "location": {
+                "latitude": data.get("latitude"),
+                "longitude": data.get("longitude"),
+                "timezone": data.get("timezone"),
+            },
+            "daily": day_points,
+            "units": data.get("daily_units", {}),
+        }
+        self._cache[day_key] = (now, day_result)
+
+        return {
+            "current": curr_result,
+            "hourly": hour_result,
+            "daily": day_result,
         }
 
     # Comprehensive Bangalore microclimate registry & Indian metros

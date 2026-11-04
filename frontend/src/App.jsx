@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { BrowserRouter, Routes, Route, NavLink, useNavigate } from "react-router-dom";
 import {
   Cloud,
@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import {
   geocodeLocation,
+  getForecastBundle,
   getCurrentWeather,
   getHourlyForecast,
   getDailyForecast,
@@ -119,7 +120,30 @@ function MainApp() {
   const [alertsCount, setAlertsCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const stationCache = useRef({});
   const navigate = useNavigate();
+
+  // Background pre-warm popular operational hubs for instant 0ms switching
+  useEffect(() => {
+    OPERATIONAL_HUBS.forEach((hub) => {
+      const k = `${hub.latitude.toFixed(3)}:${hub.longitude.toFixed(3)}`;
+      if (!stationCache.current[k]) {
+        getForecastBundle(hub.latitude, hub.longitude, 48, 7)
+          .then((res) => {
+            if (res?.data) {
+              stationCache.current[k] = {
+                current: res.data.current,
+                hourly: res.data.hourly,
+                daily: res.data.daily,
+                alertsCount: 0,
+                timestamp: Date.now(),
+              };
+            }
+          })
+          .catch(() => {});
+      }
+    });
+  }, []);
 
   // Unit conversion helpers
   const convertTemp = (celsius) => {
@@ -137,25 +161,51 @@ function MainApp() {
   const tempUnit = unit === "C" ? "C" : "F";
   const speedUnit = unit === "C" ? "km/h" : "mph";
 
-  // Fetch meteorological telemetry on station change
+  // Fetch meteorological telemetry on station change with SWR caching & composite bundle
   useEffect(() => {
     if (!location) return;
-    const fetchStationData = async () => {
+    const cacheKey = `${location.latitude.toFixed(3)}:${location.longitude.toFixed(3)}`;
+    const cached = stationCache.current[cacheKey];
+
+    if (cached) {
+      // 0ms instant transition from in-memory cache
+      setCurrent(cached.current);
+      setHourly(cached.hourly);
+      setDaily(cached.daily);
+      setAlertsCount(cached.alertsCount || 0);
+    } else if (!current) {
+      // Only show full loading spinner on initial cold launch
       setLoading(true);
+    }
+
+    const fetchStationData = async () => {
+      if (!cached) setLoading(true);
       setError(null);
       try {
-        const [currRes, hourRes, dayRes, alertRes] = await Promise.all([
-          getCurrentWeather(location.latitude, location.longitude),
-          getHourlyForecast(location.latitude, location.longitude, 48),
-          getDailyForecast(location.latitude, location.longitude, 7),
+        const [bundleRes, alertRes] = await Promise.all([
+          getForecastBundle(location.latitude, location.longitude, 48, 7),
           getAlerts(location.latitude, location.longitude).catch(() => ({ alerts: [] })),
         ]);
-        setCurrent(currRes.data);
-        setHourly(hourRes.data);
-        setDaily(dayRes.data);
-        setAlertsCount((alertRes.alerts || []).filter((a) => a.severity !== "LOW").length);
+        const bundleData = bundleRes.data;
+        const alertCount = (alertRes.alerts || []).filter((a) => a.severity !== "LOW").length;
+
+        const payload = {
+          current: bundleData.current,
+          hourly: bundleData.hourly,
+          daily: bundleData.daily,
+          alertsCount: alertCount,
+          timestamp: Date.now(),
+        };
+
+        stationCache.current[cacheKey] = payload;
+        setCurrent(payload.current);
+        setHourly(payload.hourly);
+        setDaily(payload.daily);
+        setAlertsCount(alertCount);
       } catch (err) {
-        setError(err.message || "Failed to fetch atmospheric telemetry");
+        if (!cached) {
+          setError(err.message || "Failed to fetch atmospheric telemetry");
+        }
       } finally {
         setLoading(false);
       }

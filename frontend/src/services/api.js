@@ -4,7 +4,7 @@
  * Centralizes all backend API calls with error handling.
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 /**
  * Generic fetch wrapper with error handling.
@@ -28,6 +28,10 @@ async function apiFetch(endpoint, options = {}) {
 }
 
 // ── Forecast API ──────────────────────────────────────────────
+
+export async function getForecastBundle(lat, lon, hours = 48, days = 7) {
+  return apiFetch(`/api/forecast/bundle?lat=${lat}&lon=${lon}&hours=${hours}&days=${days}`);
+}
 
 export async function getCurrentWeather(lat, lon) {
   return apiFetch(`/api/forecast/current?lat=${lat}&lon=${lon}`);

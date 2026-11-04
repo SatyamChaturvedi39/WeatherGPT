@@ -7,6 +7,7 @@ real TreeSHAP explainability, and empirical machine learning benchmark reports.
 
 import json
 import os
+import time
 from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Query, HTTPException
@@ -22,6 +23,8 @@ ARTIFACTS_DIR = os.path.abspath(
 )
 
 _cached_models_dict = None
+_cached_explain: dict[str, tuple[float, dict]] = {}
+_cached_ml_pred: dict[str, tuple[float, dict]] = {}
 
 
 def get_all_ml_models():
@@ -85,6 +88,38 @@ def get_ml_explainer():
         return models["point"], models["explainer"], models["feature_names"]
     return None, None, None
 
+
+
+@router.get("/bundle")
+async def get_forecast_bundle(
+    lat: float = Query(..., description="Latitude", ge=-90, le=90),
+    lon: float = Query(..., description="Longitude", ge=-180, le=180),
+    hours: int = Query(48, description="Number of hours to forecast", ge=1, le=168),
+    days: int = Query(7, description="Number of days to forecast", ge=1, le=16),
+):
+    """
+    High-speed composite endpoint returning current, hourly, and daily forecasts
+    in a SINGLE round-trip with unified in-memory caching.
+    """
+    service = WeatherService()
+    try:
+        data = await service.get_forecast_bundle(lat, lon, hours=hours, days=days)
+        # Apply calibrated prediction interval ribbons to hourly
+        hourly_data = data.get("hourly", {})
+        if "hourly" in hourly_data:
+            points = hourly_data["hourly"]
+            if points:
+                temps = [p["temperature_2m"] for p in points if p.get("temperature_2m") is not None]
+                if temps:
+                    t_std = float(np.std(temps))
+                    margin = max(1.2, round(0.84 * t_std * 0.45, 1))
+                    for p in points:
+                        if p.get("temperature_2m") is not None:
+                            p["temp_lower_80"] = round(p["temperature_2m"] - margin, 1)
+                            p["temp_upper_80"] = round(p["temperature_2m"] + margin, 1)
+        return {"status": "success", "data": data}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Weather bundle fetch failed: {str(e)}")
 
 
 @router.get("/current")
@@ -332,8 +367,15 @@ async def explain_forecast(
 ):
     """
     Explainability (XAI) endpoint returning genuine TreeSHAP feature attributions
-    computed on our trained XGBoost 24-hour temperature forecasting model.
+    computed on our trained XGBoost 24-hour temperature forecasting model with 15-minute caching.
     """
+    cache_key = f"{round(lat, 3)}:{round(lon, 3)}"
+    now_ts = time.time()
+    if cache_key in _cached_explain:
+        c_time, c_data = _cached_explain[cache_key]
+        if now_ts - c_time < 900:
+            return c_data
+
     service = WeatherService()
     try:
         curr = await service.get_current_conditions(lat, lon)
@@ -404,7 +446,7 @@ async def explain_forecast(
             features_list.sort(key=lambda item: item["importance"], reverse=True)
             top_features = features_list[:8]
 
-            return {
+            res_obj = {
                 "status": "success",
                 "model": "Trained XGBoost Regressor (T+24h) + TreeSHAP",
                 "base_value": round(base_value, 2),
@@ -428,6 +470,8 @@ async def explain_forecast(
                 "feature_provenance": feature_provenance,
                 "scientific_disclaimer": "SHAP attributions quantify model feature contributions relative to the training expectation (E[f(x)]); they represent statistical attribution under the learned model, not physical causality."
             }
+            _cached_explain[cache_key] = (now_ts, res_obj)
+            return res_obj
 
         # Fallback if model weights are not found
         return {

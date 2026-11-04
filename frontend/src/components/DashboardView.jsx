@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   AreaChart,
   Area,
@@ -50,19 +50,35 @@ export default function DashboardView({
   const [activityData, setActivityData] = useState(null);
   const [aqiData, setAqiData] = useState(null);
   const [showExplain, setShowExplain] = useState(false);
+  const auxCache = useRef({});
 
   useEffect(() => {
     if (!location) return;
+    const cacheKey = `${location.latitude.toFixed(3)}:${location.longitude.toFixed(3)}`;
+    const cached = auxCache.current[cacheKey];
+
+    if (cached) {
+      setExplainData(cached.explain);
+      setActivityData(cached.activity);
+      setAqiData(cached.aqi);
+    }
+
     const fetchAuxData = async () => {
       try {
         const [expRes, alertRes, aqiRes] = await Promise.all([
-          getExplainForecast(location.latitude, location.longitude),
-          getAlerts(location.latitude, location.longitude),
-          getAirQuality(location.latitude, location.longitude),
+          getExplainForecast(location.latitude, location.longitude).catch(() => null),
+          getAlerts(location.latitude, location.longitude).catch(() => null),
+          getAirQuality(location.latitude, location.longitude).catch(() => null),
         ]);
-        setExplainData(expRes);
-        setActivityData(alertRes.activity_suitability || null);
-        setAqiData(aqiRes?.data || null);
+        const newAux = {
+          explain: expRes,
+          activity: alertRes?.activity_suitability || null,
+          aqi: aqiRes?.data || null,
+        };
+        auxCache.current[cacheKey] = newAux;
+        setExplainData(newAux.explain);
+        setActivityData(newAux.activity);
+        setAqiData(newAux.aqi);
       } catch (e) {
         console.error("Auxiliary fetch error", e);
       }
@@ -80,7 +96,7 @@ export default function DashboardView({
     );
   }
 
-  if (loading) {
+  if (loading && !current) {
     return (
       <div className="loading-state-panel">
         <div className="spinner-orbit"></div>
@@ -132,6 +148,11 @@ export default function DashboardView({
           <div className="station-top-tag">
             <span className="live-status-dot"></span>
             <span className="station-code">STATION METAR • {current.location?.elevation || 0}m ASL</span>
+            {loading && (
+              <span className="font-mono" style={{ marginLeft: "8px", color: "var(--amber, #f59e0b)", fontSize: "0.68rem" }}>
+                • SYNCING...
+              </span>
+            )}
           </div>
           <h2 className="station-name">
             {location.name}
