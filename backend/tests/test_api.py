@@ -602,3 +602,21 @@ class TestScientificValidation:
 
 
 
+
+    def test_aviation_flight_disruption_reasoning(self):
+        """Verify natural language aviation flight cancellation and delay risk reasoning."""
+        response = client.post(
+            "/api/chat/",
+            json={
+                "message": "if i book a flight from bangalore to delhi. which days have the chances of getting the flights cancelled",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "reply" in data
+        reply = data["reply"]
+        assert "Flight Disruption" in reply or "Cancellation" in reply
+        assert "Kempegowda" in reply or "BLR" in reply or "Bengaluru" in reply
+        assert "Delhi" in reply or "DEL" in reply
+        assert "Aviation Disruption Matrix" in reply
+        assert "Smart Flight Booking" in reply or "DGCA" in reply

@@ -53,6 +53,7 @@ data/*.csv
 
 # ── ChromaDB persistence ────────────────────────────────────
 chroma_data/
+backend/cache/
 
 # ── Jupyter ──────────────────────────────────────────────────
 .ipynb_checkpoints/

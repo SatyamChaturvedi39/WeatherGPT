@@ -1,19 +1,19 @@
-# WeatherGPT Bharat 🌦️🛵
+# WeatherGPT 🌦️🛵
 
 > **Hyper-Local Meteorological Intelligence, Uncertainty Quantification & Commute Risk Platform**  
 > *Final-Year MSc Artificial Intelligence & Machine Learning Capstone Project (System Project Development — SPD)*
 
-[![Backend Tests](https://img.shields.io/badge/pytest-31%20passed-emerald)](backend/tests/test_api.py)
+[![Backend Tests](https://img.shields.io/badge/pytest-32%20passed-emerald)](backend/tests/test_api.py)
 [![ML Framework](https://img.shields.io/badge/ML-XGBoost%203.2%20%2B%20TreeSHAP-blue)](ml/)
 [![License](https://img.shields.io/badge/License-MIT-gray.svg)](LICENSE)
 
 ---
 
-## 1. What WeatherGPT Bharat Does
+## 1. What WeatherGPT Does
 
 Traditional weather applications provide macro-scale forecasts (10–25 km grids) that treat entire urban metropolitan areas as homogenous stations. In plateau environments like Bengaluru, this fails to capture localized convective storms, urban heat islands, and drainage choke points.
 
-**WeatherGPT Bharat** solves this by coupling:
+**WeatherGPT** solves this by coupling:
 1. **Topographic Hypsometric Downscaling**: Environmental lapse rate ($\Gamma = +0.0065^\circ\text{C}/\text{m}$) downscaling across a dedicated **25-Zone Bengaluru Microclimate Registry** with contextual stormwater drainage vulnerability mapping (BBMP audits).
 2. **Reproducible Machine Learning Forecasting**: Multi-horizon forecasting trained on 26,208 hourly records (2021–2023) comparing Persistence and Climatological baselines against **Trained XGBoost Point & Quantile Regressors**.
 3. **Calibrated Uncertainty Quantification (UQ)**: Split Conformal Prediction achieving calibrated 82.1% coverage on held-out test data (mean width 2.60°C) alongside raw non-parametric quantile regression (72.9% coverage, mean width 2.18°C).
@@ -32,7 +32,7 @@ Traditional weather applications provide macro-scale forecasts (10–25 km grids
 | **Explainability (XAI)** | TreeSHAP (`shap` 0.50.0) initialized on representative training background |
 | **Backend & REST Gateway**| FastAPI 0.115.0, Uvicorn, Pydantic v2, HTTPX, in-memory TTL caching |
 | **Frontend & UI/UX** | React 18, Vite 8, Recharts, Lucide Icons, Carbon-Matte Design System |
-| **Verification & Testing** | Pytest 8.3.5 (31 automated integration & scientific validation tests) |
+| **Verification & Testing** | Pytest 8.3.5 (32 automated integration & scientific validation tests) |
 
 ---
 
@@ -47,7 +47,7 @@ WeatherGPT/
 │   │   ├── services/         # Weather ingestion, RAG reasoner, risk engine
 │   │   └── main.py           # FastAPI entrypoint & CORS middleware
 │   └── tests/
-│       └── test_api.py       # 31 automated integration & physics tests
+│       └── test_api.py       # 32 automated integration & physics tests
 ├── frontend/                 # React + Vite web application
 │   ├── src/
 │   │   ├── components/       # Dashboard, RouteView, MicroclimatesView, BenchmarkView, ChatView
@@ -112,7 +112,7 @@ python ml/train.py
 ### 5.3 Run Automated Pytest Suite
 
 ```bash
-# Run all 31 unit, integration, and physics validation tests
+# Run all 32 unit, integration, and physics validation tests
 python -m pytest backend/tests/test_api.py -v
 ```
 
