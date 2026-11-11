@@ -700,8 +700,11 @@ class RAGService:
         """
         Hyper-local commute & raincoat recommendation engine.
         Calculates sub-hourly precipitation differentials, urban traffic ETA,
-        AASHTO contact mechanics (+43.8% stopping distance), and localized flood risks.
+        AASHTO contact mechanics (+43.8% stopping distance), departure-hour forecasting,
+        and localized flood chokepoints along transit corridors.
         """
+        from datetime import datetime
+
         c1 = (origin_ctx or {}).get("current", {})
         h1 = (origin_ctx or {}).get("hourly", [])
         c2 = (dest_ctx or {}).get("current", {})
@@ -736,6 +739,50 @@ class RAGService:
         precip2 = c2.get("precipitation", 0.0)
         wind2 = c2.get("wind_speed_10m", 8.0)
 
+        # ── Check if user specified a future departure time (e.g., "at 5pm", "at 17:00", "5 pm") ──
+        target_time_label = None
+        target_offset_h = 0
+        time_match = re.search(r"\b(?:at|around|by)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b", query, re.IGNORECASE)
+        if time_match:
+            hr = int(time_match.group(1))
+            ampm = (time_match.group(3) or "").lower()
+            if ampm == "pm" and hr < 12:
+                target_hr_24 = hr + 12
+            elif ampm == "am" and hr == 12:
+                target_hr_24 = 0
+            else:
+                target_hr_24 = hr
+
+            disp_hr = target_hr_24 if target_hr_24 <= 12 else target_hr_24 - 12
+            if disp_hr == 0:
+                disp_hr = 12
+            disp_ampm = "AM" if target_hr_24 < 12 else "PM"
+            target_time_label = f"{disp_hr}:00 {disp_ampm}"
+
+            # Calculate offset from current time
+            curr_hr = 13
+            # Check if user explicitly stated "if it is X pm right now"
+            now_match = re.search(r"\b(?:if it is|currently|it is|right now is)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b", query, re.IGNORECASE)
+            if now_match:
+                nh = int(now_match.group(1))
+                n_ampm = (now_match.group(3) or "").lower()
+                if n_ampm == "pm" and nh < 12:
+                    curr_hr = nh + 12
+                elif n_ampm == "am" and nh == 12:
+                    curr_hr = 0
+                else:
+                    curr_hr = nh
+            elif c1.get("time"):
+                try:
+                    curr_hr = datetime.fromisoformat(c1["time"]).hour
+                except Exception:
+                    pass
+
+            diff = target_hr_24 - curr_hr
+            if diff < 0:
+                diff += 24
+            target_offset_h = min(diff, len(h1) - 1) if len(h1) > 0 else 0
+
         # Sub-hourly / hourly rain forecasts
         prob1_now = (h1[0].get("precipitation_probability", 0) if len(h1) > 0 else 0) or 0
         prob1_30m = int(round((prob1_now + (h1[1].get("precipitation_probability", prob1_now) if len(h1) > 1 else prob1_now)) / 2))
@@ -745,51 +792,106 @@ class RAGService:
         prob2_30m = int(round((prob2_now + (h2[1].get("precipitation_probability", prob2_now) if len(h2) > 1 else prob2_now)) / 2))
         prob2_1h = (h2[1].get("precipitation_probability", 0) if len(h2) > 1 else prob2_now) or 0
 
-        # Assess Raincoat Need
-        rain_trigger = (
-            precip1 > 0.0 or precip2 > 0.0 or
-            prob1_30m >= 25 or prob2_30m >= 25 or
-            prob1_1h >= 30 or prob2_1h >= 30
-        )
-
         orig_name = origin_loc["name"]
         dest_name = dest_loc["name"]
 
-        # Bangalore flood risk / microclimate intelligence
-        is_koramangala = "koramangala" in dest_name.lower() or "koramangala" in orig_name.lower()
-        is_vimanapura = "vimanapura" in orig_name.lower() or "hal" in orig_name.lower() or "vimanapura" in dest_name.lower()
+        # If a future departure hour was specified, evaluate conditions at that exact future hour
+        if target_time_label and target_offset_h > 0 and len(h1) > target_offset_h:
+            h1_target = h1[target_offset_h]
+            h2_target = h2[target_offset_h] if len(h2) > target_offset_h else h1_target
+            prob1_dep = h1_target.get("precipitation_probability", 0) or 0
+            prob2_dep = h2_target.get("precipitation_probability", 0) or 0
+            precip1_dep = h1_target.get("precipitation", 0.0) or 0.0
+            precip2_dep = h2_target.get("precipitation", 0.0) or 0.0
+            t1_dep = h1_target.get("temperature_2m", t1)
+            t2_dep = h2_target.get("temperature_2m", t2)
+            rain_trigger = (precip1_dep > 0.0 or precip2_dep > 0.0 or prob1_dep >= 25 or prob2_dep >= 25)
+        else:
+            prob1_dep = prob1_now
+            prob2_dep = prob2_now
+            precip1_dep = precip1
+            precip2_dep = precip2
+            t1_dep = t1
+            t2_dep = t2
+            rain_trigger = (
+                precip1 > 0.0 or precip2 > 0.0 or
+                prob1_30m >= 25 or prob2_30m >= 25 or
+                prob1_1h >= 30 or prob2_1h >= 30
+            )
+
+        # Vehicle-specific detection (scooter / two-wheeler / bike)
+        is_scooter = bool(re.search(r"\b(?:scooter|bike|motorcycle|two-?wheeler|activa|two wheeler|scooty)\b", query, re.IGNORECASE))
 
         # Commute Departure Window Logic
+        time_qualifier = f"FOR {target_time_label} DEPARTURE" if target_time_label else "CURRENTLY"
         if rain_trigger:
-            verdict_header = "🧥 **VERDICT: YES — TAKE / WEAR A RAINCOAT**"
-            kannada_badge = "ಕನ್ನಡ: 🧥 **ತೀರ್ಪು: ಹೌದು — ರೇನ್‌ಕೋಟ್ ಧರಿಸಿ** (ಮುಂದಿನ 15–20 ನಿಮಿಷಗಳಲ್ಲಿ ಹೊರಡಿ)"
-            hindi_badge = "हिंदी: 🧥 **फैसला: हाँ — रेनकोट जरूर पहनें** (अगले 15–20 मिनट में प्रस्थान करें)"
-            departure_window = (
-                f"⚠️ **Safe Departure Window:** **Leave immediately within the next 15–20 minutes** if possible. "
-                f"Rain probability at **{dest_name}** is currently {prob2_now}% but rises to **{prob2_30m}% in 30 mins** and **{prob2_1h}% over the next hour**."
-            )
-            two_wheeler_advice = (
-                "Pack your rain jacket/poncho, wear waterproof footwear, secure smartphone in sealed bag, "
-                "and maintain larger following distance (wet asphalt stopping distance increases by +43.8% from 26.0m to 37.4m under AASHTO braking dynamics)."
-            )
+            verdict_header = f"🧥 **VERDICT: YES — TAKE / WEAR A RAINCOAT ({time_qualifier})**"
+            kannada_badge = f"ಕನ್ನಡ: 🧥 **ತೀರ್ಪು: ಹೌದು — ರೇನ್‌ಕೋಟ್ ಧರಿಸಿ** ({target_time_label or 'ತಕ್ಷಣ'} ಮಳೆಯಾಗುವ ಸಾಧ್ಯತೆ ಇದೆ)"
+            hindi_badge = f"हिंदी: 🧥 **फैसला: हाँ — रेनकोट जरूर पहनें** ({target_time_label or 'अभी'} बारिश का खतरा है)"
+            if target_time_label:
+                departure_window = (
+                    f"⚠️ **Departure Advisory for {target_time_label}:** "
+                    f"Rain probability reaches **{prob1_dep}% at {orig_name}** and **{prob2_dep}% at {dest_name}** around {target_time_label}. "
+                    f"Wet pavement is expected. Prepare full rain gear before departure."
+                )
+            else:
+                departure_window = (
+                    f"⚠️ **Safe Departure Window:** **Leave immediately within the next 15–20 minutes** if possible. "
+                    f"Rain probability at **{dest_name}** is currently {prob2_now}% but rises to **{prob2_30m}% in 30 mins** and **{prob2_1h}% over the next hour**."
+                )
+            if is_scooter:
+                two_wheeler_advice = (
+                    "🚨 **Scooter / Two-Wheeler Critical Hazard:** Wet pavement reduces tire-road contact friction to μ ≈ 0.38 (+43.8% stopping distance: takes 37.4m instead of 26.0m to stop at 60 km/h under AASHTO kinematics). "
+                    "Small 10–12 inch scooter wheels are highly vulnerable to hydroplaning and concealed potholes in puddles. Wear a waterproof jacket, water-resistant footwear, and keep speed below 35 km/h!"
+                )
+            else:
+                two_wheeler_advice = (
+                    "Pack your rain jacket/poncho, wear waterproof footwear, secure smartphone in sealed bag, "
+                    "and maintain larger following distance (wet asphalt stopping distance increases by +43.8% from 26.0m to 37.4m under AASHTO braking dynamics)."
+                )
             cab_advice = "Expect standard urban traffic to slow down significantly around arterial bottlenecks (add +15 to 25 mins buffer; surge pricing likely)."
             car_advice = "Keep speeds below 45 km/h on ring roads to prevent dynamic hydroplaning; use front/rear defoggers."
             pedestrian_advice = "Carry a windproof umbrella and watch out for curb puddle splash from heavy transit buses."
         else:
-            verdict_header = "🌤️ **VERDICT: NO RAINCOAT REQUIRED CURRENTLY**"
-            kannada_badge = "ಕನ್ನಡ: 🌤️ **ತೀರ್ಪು: ರೇನ್‌ಕೋಟ್ ಅಗತ್ಯವಿಲ್ಲ** (ಪ್ರಯಾಣಕ್ಕೆ ಹವಾಮಾನ ಅನುಕೂಲಕರ)"
-            hindi_badge = "हिंदी: 🌤️ **फैसला: रेनकोट की जरूरत नहीं** (सड़कें सूखी और सुरक्षित हैं)"
-            departure_window = (
-                f"✅ **Safe Departure Window:** **Clear to travel for the next 60–90 minutes**. "
-                f"Precipitation probability remains low across both {orig_name} ({prob1_1h}%) and {dest_name} ({prob2_1h}%)."
-            )
-            two_wheeler_advice = "Standard riding gear is sufficient. Roads are dry with good surface grip (μ ≈ 0.70)."
+            verdict_header = f"🌤️ **VERDICT: NO RAINCOAT REQUIRED ({time_qualifier})**"
+            kannada_badge = f"ಕನ್ನಡ: 🌤️ **ತೀರ್ಪು: ರೇನ್‌ಕೋಟ್ ಅಗತ್ಯವಿಲ್ಲ** ({target_time_label or 'ಈಗ'} ರಸ್ತೆಗಳು ಒಣಗಿರುತ್ತವೆ)"
+            hindi_badge = f"हिंदी: 🌤️ **फैसला: रेनकोट की जरूरत नहीं** ({target_time_label or 'अभी'} मौसम साफ और सूखा है)"
+            if target_time_label:
+                departure_window = (
+                    f"✅ **Safe Departure Window ({target_time_label}):** **Weather is clear for travel at {target_time_label}**. "
+                    f"Precipitation probability at {target_time_label} remains very low across both {orig_name} ({prob1_dep}%) and {dest_name} ({prob2_dep}%). "
+                    f"Expected temperature: ~{t1_dep:.1f}°C at {orig_name} and ~{t2_dep:.1f}°C at {dest_name}."
+                )
+            else:
+                departure_window = (
+                    f"✅ **Safe Departure Window:** **Clear to travel for the next 60–90 minutes**. "
+                    f"Precipitation probability remains low across both {orig_name} ({prob1_1h}%) and {dest_name} ({prob2_1h}%)."
+                )
+            if is_scooter:
+                two_wheeler_advice = (
+                    "🛵 **Scooter / Two-Wheeler Guidance:** Roads are dry with optimal surface friction (μ ≈ 0.70). Normal braking performance (~26.0m stopping distance at 60 km/h). Standard riding gear is sufficient."
+                )
+            else:
+                two_wheeler_advice = "Standard riding gear is sufficient. Roads are dry with good surface grip (μ ≈ 0.70)."
             cab_advice = "Normal arterial travel times expected along standard transit corridors."
             car_advice = "Dry road surface conditions with optimal tire traction."
             pedestrian_advice = "Comfortable outdoor walking conditions with low humidity index."
 
-        # Waterlogging & Spot Hazards
+        # Bangalore flood risk / microclimate intelligence & spot hazards
         spot_hazards = []
+        orig_l = orig_name.lower()
+        dest_l = dest_name.lower()
+        is_koramangala = "koramangala" in dest_l or "koramangala" in orig_l
+        is_vimanapura = "vimanapura" in orig_l or "hal" in orig_l or "vimanapura" in dest_l
+        is_whitefield_hsr = (
+            ("whitefield" in orig_l and ("hsr" in dest_l or "bellandur" in dest_l or "silk board" in dest_l)) or
+            ("hsr" in orig_l and ("whitefield" in dest_l or "marathahalli" in dest_l))
+        )
+
+        if is_whitefield_hsr:
+            spot_hazards.append("**Outer Ring Road (ORR) Bellandur EcoSpace / Devarabisanahalli:** Chronic waterlogging valley chokepoint between Whitefield and HSR Layout during convective showers.")
+            spot_hazards.append("**Marathahalli Multiplex & Underpass:** Low-lying arterial underpass prone to sudden stormwater accumulation.")
+            spot_hazards.append("**Agara Lake Junction & HSR Sector 1:** Stormwater drain buffer overflow point leading into HSR Layout.")
         if is_koramangala:
             spot_hazards.append("**Sony World Signal & 80ft Road:** Low-lying stormwater basin; prone to rapid water accumulation during convective rain.")
             spot_hazards.append("**Ejipura Inner Ring Road Underpass:** High puddle-spray risk from passing heavy vehicles.")
@@ -799,6 +901,27 @@ class RAGService:
         hazards_block = ""
         if spot_hazards:
             hazards_block = "\n".join([f"• ⚠️ {h}" for h in spot_hazards])
+
+        # Sub-hourly / Timeline table construction
+        if target_time_label and target_offset_h > 0:
+            table_header = "| Timeline / Forecast Window | " + f"{orig_name} (Origin) | {dest_name} (Destination) | Differential (Δ) |\n| :--- | :--- | :--- | :--- |\n"
+            table_row1 = f"| **Current Conditions (Now)** | {t1:.1f}°C (Feels {app1:.1f}°C) • {prob1_now}% rain | {t2:.1f}°C (Feels {app2:.1f}°C) • {prob2_now}% rain | Δ {abs(t1 - t2):.1f}°C |\n"
+            table_row2 = f"| **Target Departure ({target_time_label})** | **{t1_dep:.1f}°C • {prob1_dep}% rain risk** | **{t2_dep:.1f}°C • {prob2_dep}% rain risk** | **Δ {abs(prob1_dep - prob2_dep)}%** |\n"
+            next_h = min(target_offset_h + 1, len(h1) - 1)
+            p1_nxt = h1[next_h].get("precipitation_probability", prob1_dep) or 0
+            p2_nxt = h2[next_h].get("precipitation_probability", prob2_dep) or 0
+            t1_nxt = h1[next_h].get("temperature_2m", t1_dep)
+            t2_nxt = h2[next_h].get("temperature_2m", t2_dep)
+            table_row3 = f"| **+1 Hour Arrival Window** | {t1_nxt:.1f}°C • {p1_nxt}% rain risk | {t2_nxt:.1f}°C • {p2_nxt}% rain risk | Δ {abs(p1_nxt - p2_nxt)}% |"
+            timeline_table = table_header + table_row1 + table_row2 + table_row3
+        else:
+            table_header = "| Timeline / Metric | " + f"{orig_name} (Origin) | {dest_name} (Destination) | Differential (Δ) |\n| :--- | :--- | :--- | :--- |\n"
+            table_row1 = f"| **Current Temperature** | {t1}°C (Feels {app1}°C) | {t2}°C (Feels {app2}°C) | {abs(t1 - t2):.1f}°C |\n"
+            table_row2 = f"| **Now (Departure)** | {precip1} mm/h ({prob1_now}% rain) | {precip2} mm/h ({prob2_now}% rain) | Δ {abs(prob1_now - prob2_now)}% |\n"
+            table_row3 = f"| **+30 Mins (Arrival Window)** | **{prob1_30m}% rain risk** | **{prob2_30m}% rain risk** | Δ {abs(prob1_30m - prob2_30m)}% |\n"
+            table_row4 = f"| **+60 Mins (Return Window)** | {prob1_1h}% rain risk | {prob2_1h}% rain risk | Δ {abs(prob1_1h - prob2_1h)}% |\n"
+            table_row5 = f"| **Humidity / Wind** | {hum1}% • {wind1} km/h | {hum2}% • {wind2} km/h | Δ {abs(hum1 - hum2)}% |"
+            timeline_table = table_header + table_row1 + table_row2 + table_row3 + table_row4 + table_row5
 
         reply = (
             f"### {verdict_header}\n\n"
@@ -817,21 +940,15 @@ class RAGService:
             f"{hazards_block}\n\n"
             f"---\n\n"
             f"#### ⏱️ Sub-Hourly Nowcast Comparison Table\n\n"
-            f"| Timeline / Metric | {orig_name} (Origin) | {dest_name} (Destination) | Differential (Δ) |\n"
-            f"| :--- | :--- | :--- | :--- |\n"
-            f"| **Current Temperature** | {t1}°C (Feels {app1}°C) | {t2}°C (Feels {app2}°C) | {abs(t1 - t2):.1f}°C |\n"
-            f"| **Now (Departure)** | {precip1} mm/h ({prob1_now}% rain) | {precip2} mm/h ({prob2_now}% rain) | Δ {abs(prob1_now - prob2_now)}% |\n"
-            f"| **+30 Mins (Arrival Window)** | **{prob1_30m}% rain risk** | **{prob2_30m}% rain risk** | Δ {abs(prob1_30m - prob2_30m)}% |\n"
-            f"| **+60 Mins (Return Window)** | {prob1_1h}% rain risk | {prob2_1h}% rain risk | Δ {abs(prob1_1h - prob2_1h)}% |\n"
-            f"| **Humidity / Wind** | {hum1}% • {wind1} km/h | {hum2}% • {wind2} km/h | Δ {abs(hum1 - hum2)}% |\n\n"
-            f"💡 *Tip: Late afternoon urban convection can trigger localized showers rapidly. On two-wheelers, keeping a compact poncho under the seat is always recommended.*\n\n"
+            f"{timeline_table}\n\n"
+            f"💡 *Tip: Late afternoon urban convection in Bengaluru can trigger localized showers rapidly. On a scooter, keeping a compact poncho under the seat is always recommended.*\n\n"
             f"🔬 *Data Provenance & Scientific Disclosure: Open-Meteo High-Resolution NWP. Braking distances modeled via AASHTO contact mechanics (stopping distance d = v·t + v²/(2·g·f)). Flood chokepoints sourced from municipal stormwater audits.*"
         )
 
         sources.append({
             "title": f"Commute Corridor ({orig_name} ➔ {dest_name})",
             "source": "Open-Meteo High-Resolution Ensemble & Urban Spatial Index",
-            "values": f"Distance: {dist_km} km, Urban ETA: ~{est_mins} mins, Raincoat Needed: {'YES' if rain_trigger else 'NO'}",
+            "values": f"Distance: {dist_km} km, Urban ETA: ~{est_mins} mins, Target: {target_time_label or 'Now'}, Raincoat: {'YES' if rain_trigger else 'NO'}",
         })
 
         return {
