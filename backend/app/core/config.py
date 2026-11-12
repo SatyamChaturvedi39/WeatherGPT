@@ -37,6 +37,15 @@ class Settings(BaseSettings):
     # ── Alert history (SQLite, episodes recorded by the risk engine) ──
     ALERT_HISTORY_DB_PATH: str = "./crowd_data/alert_history.db"
 
+    # ── Live forecast verification (SQLite) ──────────────────────
+    FORECAST_LOG_DB_PATH: str = "./crowd_data/forecast_log.db"
+
+    # ── Background jobs (forecast logging/verification, alert notifications) ──
+    BACKGROUND_JOBS_ENABLED: bool = True
+    FORECAST_JOB_INTERVAL_S: int = 3600
+    # Always forecast & verify here, even with no visitors (Bengaluru CBD)
+    TRACKED_LOCATIONS: list[tuple[float, float]] = [(12.9716, 77.5946)]
+
     # ── ChromaDB (Vector Store) ──────────────────────────────────
     CHROMA_PERSIST_DIR: str = "./chroma_data"
 

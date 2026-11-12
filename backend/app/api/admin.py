@@ -18,6 +18,7 @@ from app.core.config import get_settings
 from app.core.database import DB_STATUS
 from app.services.alert_history import AlertHistoryStore
 from app.services.crowd_reports import ReportStore
+from app.services.verification import get_forecast_log_store, verify_due
 from app.services.weather import WeatherService
 
 router = APIRouter()
@@ -60,6 +61,23 @@ def _count_rows(db_path: str, table: str, store_cls) -> int | None:
             return conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
     except Exception:
         return None
+
+
+@router.get("/verification")
+async def get_forecast_verification(days: int = 30):
+    """
+    Live accuracy of issued T+24h temperature forecasts against what happened,
+    for WeatherGPT's blended model, persistence and Open-Meteo's own forecast.
+    """
+    store = get_forecast_log_store()
+    await verify_due(store)
+    return {
+        "status": "success",
+        "horizon_hours": 24,
+        "truth_source": "Open-Meteo hourly analysis (temperature_2m), not an independent station observation",
+        **store.stats(days=max(1, min(days, 365))),
+        "recent": store.recent_pairs(limit=72),
+    }
 
 
 @router.get("/metrics")

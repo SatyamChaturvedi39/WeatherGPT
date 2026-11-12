@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.core.database import engine, Base, DB_STATUS
 from app.api import forecast, alerts, chat, settings as settings_router, admin, flood
+from app.services.scheduler import start_background_jobs
 
 settings = get_settings()
 
@@ -25,7 +26,11 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         DB_STATUS.update(connected=False, error=str(exc).splitlines()[0][:200])
         print(f"[Notice] Database initialization deferred: {exc}")
+
+    jobs = start_background_jobs() if settings.BACKGROUND_JOBS_ENABLED else []
     yield
+    for task in jobs:
+        task.cancel()
 
 
 app = FastAPI(

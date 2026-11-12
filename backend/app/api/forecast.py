@@ -14,6 +14,7 @@ from fastapi import APIRouter, Query, HTTPException
 import numpy as np
 
 from app.services.weather import WeatherService
+from app.services.verification import record_forecast
 
 router = APIRouter()
 
@@ -542,6 +543,8 @@ async def get_ml_prediction(
 
         conformal_lower = round(q10_pred - cal["margin_c"], 2)
         conformal_upper = round(q90_pred + cal["margin_c"], 2)
+
+        await record_forecast(lat, lon, predicted_point, current_temp)
 
         return {
             "status": "success",
