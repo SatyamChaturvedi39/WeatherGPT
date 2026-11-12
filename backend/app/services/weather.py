@@ -1140,6 +1140,28 @@ class WeatherService:
         ratios = {k: v / cls._WHO_GUIDELINES[k] for k, v in values.items() if v is not None}
         return max(ratios, key=ratios.get) if ratios else None
 
+    async def _fetch_multi_aqi(self, coords: list[tuple[float, float]]) -> list[int | None]:
+        """Current US AQI for several points in one Open-Meteo call; None on failure."""
+        if not coords:
+            return []
+        params = {
+            "latitude": ",".join(f"{lat:.4f}" for lat, _ in coords),
+            "longitude": ",".join(f"{lon:.4f}" for _, lon in coords),
+            "current": "us_aqi",
+            "timezone": "auto",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                res = await client.get("https://air-quality-api.open-meteo.com/v1/air-quality", params=params)
+                res.raise_for_status()
+                data = res.json()
+            WeatherService._api_calls_count += 1
+            items = data if isinstance(data, list) else [data]
+            out = [(it.get("current") or {}).get("us_aqi") for it in items]
+            return out if len(out) == len(coords) else [None] * len(coords)
+        except Exception:
+            return [None] * len(coords)
+
     async def get_bangalore_microclimates_summary(self) -> list[dict]:
         """
         Compile live meteorological and flood-risk telemetry across all 24+
@@ -1148,18 +1170,21 @@ class WeatherService:
         """
         # Base observation sampled from central station (Bengaluru CBD)
         base_lat, base_lon = 12.9716, 77.5946
+        # No invented defaults: if the live base observation fails, the endpoint errors.
+        base_cond = await self.get_current_conditions(base_lat, base_lon)
+        base_curr = base_cond.get("current", {})
+        base_temp = base_curr["temperature_2m"]
+        base_humidity = base_curr["relative_humidity_2m"]
+        base_precip = base_curr.get("precipitation") or 0.0
+
+        # Real NWP rain probability for the current hour at the base station
+        rain_prob: int | None = None
         try:
-            base_cond = await self.get_current_conditions(base_lat, base_lon)
-            base_curr = base_cond.get("current", {})
-            base_temp = base_curr.get("temperature_2m", 24.5)
-            base_humidity = base_curr.get("relative_humidity_2m", 62)
-            base_precip = base_curr.get("precipitation", 0.0)
-            base_pressure = base_curr.get("surface_pressure", 914.0)
+            hourly = (await self.get_hourly_forecast(base_lat, base_lon, hours=3)).get("hourly", [])
+            if hourly and hourly[0].get("precipitation_probability") is not None:
+                rain_prob = int(hourly[0]["precipitation_probability"])
         except Exception:
-            base_temp = 24.5
-            base_humidity = 62
-            base_precip = 0.0
-            base_pressure = 914.0
+            rain_prob = None
 
         base_elevation = 915.0  # meters ASL
         results = []
@@ -1206,18 +1231,13 @@ class WeatherService:
             flood_risk = loc["flood_risk"]
             local_precip = base_precip
 
-            # Standard regional rain odds from base observation
             if base_precip >= 2.5:
-                rain_prob = 85
                 condition = "Active Regional Rain"
             elif base_precip > 0.1:
-                rain_prob = 60
                 condition = "Scattered Light Rain"
             elif base_humidity > 80:
-                rain_prob = 35
                 condition = "Overcast / High Humidity"
             else:
-                rain_prob = 15
                 condition = "Nominal / Dry Surface"
 
             # Chokepoints (Historical stormwater drainage basins from BBMP flood audits)
@@ -1235,14 +1255,6 @@ class WeatherService:
             elif "whitefield" in k_lower:
                 chokepoints = ["ITPL Main Road", "Hope Farm Junction"]
 
-            # Local AQI contextual traffic corridor estimates
-            if any(p in k_lower for p in ["silk board", "whitefield", "marathahalli", "bellandur"]):
-                local_aqi = 125  # High traffic & road dust
-            elif any(g in k_lower for g in ["jayanagar", "malleshwaram", "cubbon"]):
-                local_aqi = 48   # Canopy buffer
-            else:
-                local_aqi = 65
-
             results.append({
                 "id": key,
                 "name": name,
@@ -1257,10 +1269,10 @@ class WeatherService:
                 "flood_risk": flood_risk,
                 "hazard_classification": f"Contextual Historical Vulnerability: {flood_risk}",
                 "chokepoints": chokepoints,
-                "aqi": local_aqi,
+                "aqi": None,  # filled from the batched air-quality call below
                 "latitude": loc["latitude"],
                 "longitude": loc["longitude"],
-                "raincoat_recommended": rain_prob >= 50 or local_precip > 0.1,
+                "raincoat_recommended": (rain_prob is not None and rain_prob >= 50) or local_precip > 0.1,
                 "scientific_provenance": {
                     "temperature_method": "Environmental Lapse Rate: T_local = T_base - 0.0065 * (z_local - z_base) + UHI offset (relative to 915m ASL base)",
                     "precipitation_source": "Open-Meteo Synoptic Forecast Grid (ECMWF/GFS)",
@@ -1268,6 +1280,11 @@ class WeatherService:
                     "is_live_flood_simulation": False
                 }
             })
+
+        # Live per-zone US AQI in one multi-location request; null where unavailable
+        aqi_values = await self._fetch_multi_aqi([(r["latitude"], r["longitude"]) for r in results])
+        for r, aqi in zip(results, aqi_values):
+            r["aqi"] = aqi
 
         # Sort by flood risk severity (Critical -> Severe -> High -> Moderate -> Low)
         severity_order = {"Critical": 0, "Severe": 1, "High": 2, "Moderate": 3, "Low": 4}

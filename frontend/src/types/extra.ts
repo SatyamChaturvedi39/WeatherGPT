@@ -54,12 +54,14 @@ export interface Microclimate {
   temperature: number;
   humidity: number;
   precipitation_rate: number;
-  rain_probability: number;
+  /** NWP rain chance for the current hour; null if the forecast was unavailable */
+  rain_probability: number | null;
   condition: string;
   flood_risk: string;
   hazard_classification: string;
   chokepoints: string[];
-  aqi: number;
+  /** Live US AQI; null if the air-quality call failed */
+  aqi: number | null;
   latitude: number;
   longitude: number;
   raincoat_recommended: boolean;

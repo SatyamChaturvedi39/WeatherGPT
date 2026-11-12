@@ -39,7 +39,7 @@ function ZoneMap({ zones, selected, onSelect }: { zones: Microclimate[]; selecte
       ))}
       {zones.map((z) => {
         const active = z.id === selected;
-        const r = 7 + Math.min(10, z.rain_probability / 10);
+        const r = 7 + Math.min(10, (z.rain_probability ?? 0) / 10);
         return (
           <g key={z.id} transform={`translate(${x(z.longitude)},${y(z.latitude)})`} className="cursor-pointer" onClick={() => onSelect(z.id)}>
             <circle r={r + 8} fill={riskColor(z.flood_risk)} opacity={active ? 0.25 : 0.12} />
@@ -112,10 +112,10 @@ export const MicroclimatesPage: React.FC = () => {
                 {[
                   ['Temperature', `${sel.temperature.toFixed(1)}°C`],
                   ['Humidity', `${sel.humidity}%`],
-                  ['Rain chance', `${sel.rain_probability}%`],
+                  ['Rain chance', sel.rain_probability == null ? '—' : `${sel.rain_probability}%`],
                   ['Rain rate', `${sel.precipitation_rate} mm/h`],
                   ['Elevation', `${sel.elevation} m (${sel.elevation_delta_m > 0 ? '+' : ''}${sel.elevation_delta_m})`],
-                  ['AQI', String(sel.aqi)],
+                  ['AQI', sel.aqi == null ? '—' : String(sel.aqi)],
                 ].map(([k, v]) => (
                   <div key={k} className="rounded-btn bg-app-subtle px-3 py-2">
                     <div className="text-2xs text-text-muted">{k}</div>
@@ -171,8 +171,8 @@ export const MicroclimatesPage: React.FC = () => {
               </div>
               <div className="mt-2 flex gap-4 text-xs tabular-nums text-text-secondary">
                 <span>{z.temperature.toFixed(1)}°</span>
-                <span>{z.rain_probability}% rain</span>
-                <span>AQI {z.aqi}</span>
+                <span>{z.rain_probability == null ? '—' : `${z.rain_probability}%`} rain</span>
+                <span>AQI {z.aqi ?? '—'}</span>
               </div>
             </button>
           ))}
