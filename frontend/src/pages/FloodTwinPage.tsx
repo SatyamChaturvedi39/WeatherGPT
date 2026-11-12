@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Waves, Clock, Layers, FlaskConical, Users } from 'lucide-react';
 import { Area, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -66,7 +66,7 @@ function FloodMap({ zones, hour, selected, onSelect }: { zones: FloodZone[]; hou
   const y = (lat: number) => H - ((lat - bounds.minLat) / (bounds.maxLat - bounds.minLat)) * H;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full rounded-btn bg-app-subtle" role="img" aria-label="Waterlogging probability heatmap by zone">
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full rounded-btn bg-app-subtle" role="group" aria-label="Waterlogging probability heatmap by zone">
       <defs>
         {zones.map((z) => {
           const p = z.timeline[hour]?.p_waterlog ?? 0;
@@ -80,14 +80,32 @@ function FloodMap({ zones, hour, selected, onSelect }: { zones: FloodZone[]; hou
       </defs>
       {zones.map((z) => {
         const p = z.timeline[hour]?.p_waterlog ?? 0;
-        return <circle key={`h-${z.id}`} cx={x(z.longitude)} cy={y(z.latitude)} r={30 + p * 45} fill={`url(#heat-${z.id.replace(/\s/g, '-')})`} />;
+        return <circle key={`h-${z.id}`} cx={x(z.longitude)} cy={y(z.latitude)} r={30 + p * 45} fill={`url(#heat-${z.id.replace(/\s/g, '-')})`} pointerEvents="none" aria-hidden="true" />;
       })}
       {zones.map((z) => {
         const t = z.timeline[hour];
         const p = t?.p_waterlog ?? 0;
         const active = z.id === selected;
         return (
-          <g key={z.id} transform={`translate(${x(z.longitude)},${y(z.latitude)})`} className="cursor-pointer" onClick={() => onSelect(z.id)}>
+          <g
+            key={z.id}
+            transform={`translate(${x(z.longitude)},${y(z.latitude)})`}
+            className="group cursor-pointer outline-none"
+            role="button"
+            tabIndex={0}
+            aria-pressed={active}
+            aria-label={`${z.name}: ${pct(p)} waterlogging chance${t ? `, ${t.level}` : ''}`}
+            onClick={() => onSelect(z.id)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onSelect(z.id);
+              }
+            }}
+          >
+            {/* Invisible larger hit target so small markers are easy to click/tap */}
+            <circle r={16} fill="transparent" />
+            <circle r={14} fill="none" stroke="var(--color-accent)" strokeWidth={2.5} className="opacity-0 group-focus-visible:opacity-100" />
             <circle r={active ? 9 : 7} fill={heat(p)} stroke="white" strokeWidth={active ? 3 : 1.5} />
             <text y={-13} textAnchor="middle" className="fill-[var(--color-text-secondary)] text-[11px] font-medium" style={{ paintOrder: 'stroke', stroke: 'var(--color-bg-subtle)', strokeWidth: 3 }}>
               {z.name.length > 16 ? `${z.name.slice(0, 15)}…` : z.name}
@@ -141,6 +159,11 @@ export const FloodTwinPage: React.FC = () => {
     () => [...zones].sort((a, b) => (b.timeline[h]?.p_waterlog ?? 0) - (a.timeline[h]?.p_waterlog ?? 0)),
     [zones, h]
   );
+  // Pin the initial pick (riskiest zone on first load) so the detail panel
+  // doesn't jump to a different zone when the scenario or hour changes.
+  useEffect(() => {
+    if (selected === null && ranked[0]) setSelected(ranked[0].id);
+  }, [selected, ranked]);
   const sel = zones.find((z) => z.id === selected) ?? ranked[0];
   const cityNow = data?.city_timeline[h];
   const flagged = cityNow ? cityNow.zones_warning + cityNow.zones_severe : 0;
@@ -154,7 +177,7 @@ export const FloodTwinPage: React.FC = () => {
     <div className="space-y-6">
       <PageHeader
         title="Flood-Risk Digital Twin"
-        subtitle="Probability of road waterlogging per zone: Monte Carlo rain ensemble driven through a stormwater ponding model."
+        subtitle="Bengaluru only, independent of your selected location. Probability of road waterlogging per zone: Monte Carlo rain ensemble driven through a stormwater ponding model."
         updatedAt={dataUpdatedAt ? new Date(dataUpdatedAt) : null}
         onRefresh={() => refetch()}
         isRefreshing={isFetching}
