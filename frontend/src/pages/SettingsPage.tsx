@@ -8,12 +8,14 @@ import { Badge } from '../components/ui/Badge';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { ErrorState } from '../components/ui/ErrorState';
 import { PageHeader } from '../components/layout/PageHeader';
+import { AlertNotificationsCard } from '../components/settings/AlertNotificationsCard';
 
 interface SettingsPageProps {
   onUseMyLocation?: () => void;
+  currentLocation?: { name: string; latitude: number; longitude: number };
 }
 
-export const SettingsPage: React.FC<SettingsPageProps> = ({ onUseMyLocation }) => {
+export const SettingsPage: React.FC<SettingsPageProps> = ({ onUseMyLocation, currentLocation }) => {
   const { data: settings, updateSettings, isUpdating, isError, refetch } = usePlatformSettings();
 
   const [newCityName, setNewCityName] = useState('');
@@ -146,6 +148,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onUseMyLocation }) =
           })}
         </div>
       </Card>
+
+      <AlertNotificationsCard
+        locations={[
+          ...(currentLocation ? [currentLocation] : []),
+          ...(settings?.saved_locations ?? []).map((l) => ({ name: l.name, latitude: l.latitude, longitude: l.longitude })),
+        ]}
+      />
 
       {/* 3. Monitored Saved Locations */}
       <Card

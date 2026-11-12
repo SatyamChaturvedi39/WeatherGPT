@@ -259,7 +259,15 @@ const AppContent: React.FC = () => {
                 />
               }
             />
-            <Route path="/settings" element={<SettingsPage onUseMyLocation={detectLocation} />} />
+            <Route
+              path="/settings"
+              element={
+                <SettingsPage
+                  onUseMyLocation={detectLocation}
+                  currentLocation={{ name: currentLocation.name, latitude: currentLocation.latitude, longitude: currentLocation.longitude }}
+                />
+              }
+            />
             <Route path="/admin" element={<AdminPage />} />
             <Route
               path="/alerts"
