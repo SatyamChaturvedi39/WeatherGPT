@@ -12,6 +12,7 @@ export interface PushStatus {
   subscribed: boolean;
   min_severity: Severity | null;
   locations: WatchedLocation[];
+  flood_zones: string[];
 }
 
 const API = '/api/notifications';
@@ -50,12 +51,12 @@ export async function currentSubscription(): Promise<PushSubscription | null> {
 
 export async function getPushStatus(): Promise<PushStatus> {
   const sub = await currentSubscription();
-  if (!sub) return { subscribed: false, min_severity: null, locations: [] };
+  if (!sub) return { subscribed: false, min_severity: null, locations: [], flood_zones: [] };
   return post<PushStatus>('/status', { endpoint: sub.endpoint });
 }
 
 /** Ask for permission (if needed), subscribe this browser and register the locations to watch. */
-export async function enablePush(locations: WatchedLocation[], minSeverity: Severity): Promise<void> {
+export async function enablePush(locations: WatchedLocation[], minSeverity: Severity, floodZones: string[] = []): Promise<void> {
   if (!isPushSupported()) throw new Error('This browser does not support push notifications.');
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') throw new Error('Notifications are blocked for this site. Allow them in the browser settings.');
@@ -70,7 +71,7 @@ export async function enablePush(locations: WatchedLocation[], minSeverity: Seve
       applicationServerKey: urlBase64ToUint8Array(public_key) as BufferSource,
     });
   }
-  await post('/subscribe', { subscription: sub.toJSON(), locations, min_severity: minSeverity });
+  await post('/subscribe', { subscription: sub.toJSON(), locations, min_severity: minSeverity, flood_zones: floodZones });
 }
 
 export async function disablePush(): Promise<void> {

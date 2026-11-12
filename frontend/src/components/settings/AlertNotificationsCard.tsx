@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { BellRing, BellOff, Send } from 'lucide-react';
+import { BellRing, BellOff, Send, Waves } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { SegmentedControl } from '../ui/SegmentedControl';
+import { useFloodTwin } from '../../hooks/useWeather';
 import {
   disablePush,
   enablePush,
@@ -32,15 +33,24 @@ export const AlertNotificationsCard: React.FC<Props> = ({ locations }) => {
   const [severity, setSeverity] = useState<Severity>('MODERATE');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [floodZones, setFloodZones] = useState<string[]>([]);
   const watched = locations.slice(0, 10);
+  const { data: twin } = useFloodTwin(6, 0);
+  const zoneOptions = useMemo(
+    () => (twin?.zones ?? []).map((z) => ({ id: z.id, name: z.name })).sort((a, b) => a.name.localeCompare(b.name)),
+    [twin]
+  );
+  const toggleZone = (id: string) =>
+    setFloodZones((cur) => (cur.includes(id) ? cur.filter((z) => z !== id) : [...cur, id]));
 
   const refresh = useCallback(async () => {
     try {
       const s = await getPushStatus();
       setStatus(s);
       if (s.min_severity) setSeverity(s.min_severity);
+      if (s.subscribed) setFloodZones(s.flood_zones);
     } catch {
-      setStatus({ subscribed: false, min_severity: null, locations: [] });
+      setStatus({ subscribed: false, min_severity: null, locations: [], flood_zones: [] });
     }
   }, []);
 
@@ -79,6 +89,36 @@ export const AlertNotificationsCard: React.FC<Props> = ({ locations }) => {
             <SegmentedControl options={SEVERITY_OPTIONS} value={severity} onChange={setSeverity} ariaLabel="Minimum alert severity" />
           </div>
 
+          <fieldset className="space-y-1.5">
+            <legend className="flex items-center gap-1.5 text-xs font-medium text-text-secondary">
+              <Waves className="h-3.5 w-3.5" /> Flood warnings for Bengaluru zones
+              <span className="font-normal text-text-muted">({floodZones.length} selected)</span>
+            </legend>
+            <p className="text-2xs text-text-muted">
+              Notified when the Flood Twin forecasts Warning or Severe waterlogging in a zone within 6 hours.
+            </p>
+            <div className="flex max-h-36 flex-wrap gap-1.5 overflow-y-auto">
+              {zoneOptions.map((z) => {
+                const selected = floodZones.includes(z.id);
+                return (
+                  <button
+                    key={z.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => toggleZone(z.id)}
+                    className={`rounded-full border px-2.5 py-1 text-2xs transition-colors ${
+                      selected
+                        ? 'border-accent bg-accent-subtle text-accent'
+                        : 'border-border-subtle bg-app-subtle text-text-secondary hover:border-accent'
+                    }`}
+                  >
+                    {z.name}
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+
           <div className="text-xs text-text-secondary">
             <span className="font-medium">Watching: </span>
             {(on ? status!.locations : watched).map((l) => l.name).join(', ') || '—'}
@@ -90,7 +130,9 @@ export const AlertNotificationsCard: React.FC<Props> = ({ locations }) => {
               size="sm"
               icon={<BellRing className="h-3.5 w-3.5" />}
               disabled={busy || watched.length === 0}
-              onClick={() => run(() => enablePush(watched, severity), on ? 'Notification settings updated.' : 'Alert notifications are on.')}
+              onClick={() =>
+                run(() => enablePush(watched, severity, floodZones), on ? 'Notification settings updated.' : 'Alert notifications are on.')
+              }
             >
               {on ? 'Update' : 'Turn on'}
             </Button>
