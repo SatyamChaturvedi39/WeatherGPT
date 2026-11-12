@@ -98,6 +98,15 @@ class AlertHistoryStore:
                         (sev, peak, now, a.get("description", row["description"]), row["id"]),
                     )
 
+    def open_events(self, lat: float, lon: float) -> list[dict]:
+        """Alert episodes currently active (not yet resolved) at a location."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM alert_events WHERE location_key = ? AND resolved_at IS NULL",
+                (location_key(lat, lon),),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
     def history(self, lat: float, lon: float, days: int, now: float | None = None) -> list[dict]:
         """Alert episodes for a location that were active within the last `days` days, newest first."""
         now = now if now is not None else time.time()

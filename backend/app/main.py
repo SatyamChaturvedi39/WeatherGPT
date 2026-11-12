@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.database import engine, Base, DB_STATUS
-from app.api import forecast, alerts, chat, settings as settings_router, admin, flood
+from app.api import forecast, alerts, chat, settings as settings_router, admin, flood, notifications
 from app.services.scheduler import start_background_jobs
 
 settings = get_settings()
@@ -56,6 +56,7 @@ app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["Settings"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 app.include_router(flood.router, prefix="/api/flood", tags=["Flood Twin"])
+app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
 
 
 # ── Health check ─────────────────────────────────────────────────

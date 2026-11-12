@@ -4,6 +4,8 @@ In-process background jobs, started from the FastAPI lifespan.
 * Forecast job (hourly): issue a T+24h forecast for every tracked location so
   the verification log fills up even without visitors, then verify forecasts
   whose target hour has passed.
+* Alert job (every 15 min): evaluate alerts at every location a browser has
+  subscribed to and send Web Push notifications for new or escalated alerts.
 
 Jobs are best-effort: failures are logged and the loop keeps running.
 Disable with BACKGROUND_JOBS_ENABLED=false (the test suite does).
@@ -45,6 +47,17 @@ async def _loop(name: str, interval_s: int, fn) -> None:
         await asyncio.sleep(interval_s)
 
 
+async def run_alert_cycle() -> None:
+    from app.api.notifications import run_alert_cycle as cycle
+
+    sent = await cycle()
+    if sent:
+        print(f"[jobs] sent {sent} alert notifications")
+
+
 def start_background_jobs() -> list[asyncio.Task]:
     s = get_settings()
-    return [asyncio.create_task(_loop("forecast", s.FORECAST_JOB_INTERVAL_S, run_forecast_cycle))]
+    return [
+        asyncio.create_task(_loop("forecast", s.FORECAST_JOB_INTERVAL_S, run_forecast_cycle)),
+        asyncio.create_task(_loop("alerts", s.ALERT_JOB_INTERVAL_S, run_alert_cycle)),
+    ]

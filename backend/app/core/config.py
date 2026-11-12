@@ -43,6 +43,14 @@ class Settings(BaseSettings):
     # ── Background jobs (forecast logging/verification, alert notifications) ──
     BACKGROUND_JOBS_ENABLED: bool = True
     FORECAST_JOB_INTERVAL_S: int = 3600
+    ALERT_JOB_INTERVAL_S: int = 900
+
+    # ── Web Push alert notifications ─────────────────────────────
+    PUSH_DB_PATH: str = "./crowd_data/push_subscriptions.db"
+    VAPID_PRIVATE_KEY_PATH: str = "./crowd_data/vapid_private.pem"
+    # Contact the push services may use about this sender (mailto: or https: URL)
+    VAPID_SUBJECT: str = "mailto:admin@example.com"
+
     # Always forecast & verify here, even with no visitors (Bengaluru CBD)
     TRACKED_LOCATIONS: list[tuple[float, float]] = [(12.9716, 77.5946)]
 
