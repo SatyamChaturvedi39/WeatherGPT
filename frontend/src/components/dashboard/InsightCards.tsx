@@ -78,7 +78,7 @@ export const MlPredictionCard: React.FC<Loc> = ({ lat, lon }) => {
             · {data.split_conformal_interval_80.calibrated_empirical_coverage_pct}% tested coverage
           </div>
           <div className="flex items-center justify-between text-sm">
-            <span className="text-text-secondary">Rain in next 24h</span>
+            <span className="text-text-secondary">Rain this hour tomorrow</span>
             <span className="flex items-center gap-2">
               <strong className="tabular-nums text-text-primary">{data.precipitation_risk_24h.rain_probability_pct}%</strong>
               <Badge size="sm" variant={severityVariant(data.precipitation_risk_24h.risk_category.split(' ')[0])}>
@@ -86,6 +86,18 @@ export const MlPredictionCard: React.FC<Loc> = ({ lat, lon }) => {
               </Badge>
             </span>
           </div>
+          {data.point_forecast_method?.method === 'nwp_corrected' ? (
+            <p className="text-2xs text-text-muted">
+              Uses Open-Meteo&apos;s forecast ({data.point_forecast_method.nwp_forecast_c?.toFixed(1)}°), corrected by its
+              average error over the last {data.point_forecast_method.nwp_bias_window_days} days
+              ({(data.point_forecast_method.nwp_recent_bias_c ?? 0) > 0 ? '+' : ''}
+              {data.point_forecast_method.nwp_recent_bias_c?.toFixed(2)}°).
+            </p>
+          ) : (
+            data.point_forecast_method && (
+              <p className="text-2xs text-text-muted">Open-Meteo forecast unavailable: using station history only.</p>
+            )
+          )}
           {data.is_fallback && <p className="text-2xs text-text-muted">Some input lags were imputed (fallback values used).</p>}
         </div>
       )}

@@ -134,6 +134,12 @@ export interface MlPrediction {
   };
   precipitation_risk_24h: { rain_probability_pct: number; risk_category: string };
   is_fallback: boolean;
+  point_forecast_method?: {
+    method: 'nwp_corrected' | 'station_blend';
+    nwp_forecast_c?: number;
+    nwp_recent_bias_c?: number;
+    nwp_bias_window_days?: number;
+  };
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
