@@ -473,25 +473,11 @@ async def explain_forecast(
             _cached_explain[cache_key] = (now_ts, res_obj)
             return res_obj
 
-        # Fallback if model weights are not found
-        return {
-            "status": "partial",
-            "model": "Heuristic Attribution (Model artifact not loaded)",
-            "base_value": 22.7,
-            "predicted_value": float(curr.get("current", {}).get("temperature_2m", 24.0)),
-            "units": "°C",
-            "features": [
-                {
-                    "feature": "Current Surface Temperature",
-                    "shap_value": 1.25,
-                    "importance": 1.25,
-                    "direction": "increases",
-                    "description": "Direct thermal persistence from current station reading."
-                }
-            ],
-            "confidence_level": "Uncalibrated",
-            "scientific_disclaimer": "Pre-trained model weights were not found on disk. Run `python ml/train.py` to generate TreeSHAP explanations."
-        }
+        # No invented attributions when the trained model is unavailable
+        raise HTTPException(
+            status_code=503,
+            detail="Trained ML model artifacts not found on disk. Run 'python ml/train.py' to generate TreeSHAP explanations.",
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -673,14 +659,14 @@ async def get_model_benchmarks():
             if "dataset_summary" in data:
                 ds = data["dataset_summary"]
                 if "total_observations" not in ds:
-                    ds["total_observations"] = ds.get("total_supervised_records", 26208)
+                    ds["total_observations"] = ds.get("total_supervised_records")
 
             if "temperature_forecasting_benchmark" in data and "model_comparison" not in data:
                 t1 = data["temperature_forecasting_benchmark"][0]
                 t6 = data["temperature_forecasting_benchmark"][1]
                 t24 = data["temperature_forecasting_benchmark"][2]
-                rain_brier = data.get("precipitation_classification_benchmark", {}).get("xgboost_brier_score", 0.123)
-                base_brier = data.get("precipitation_classification_benchmark", {}).get("climatological_brier_score", 0.158)
+                rain_brier = data.get("precipitation_classification_benchmark", {}).get("xgboost_brier_score")
+                base_brier = data.get("precipitation_classification_benchmark", {}).get("climatological_brier_score")
                 data["model_comparison"] = [
                     {
                         "model": "Persistence Baseline (t-h)",
@@ -734,90 +720,10 @@ async def get_model_benchmarks():
         except Exception as e:
             print(f"Warning: Failed to load benchmark_results.json: {e}")
 
-    # Fallback to recorded experiment results if JSON file cannot be read
-    return {
-        "status": "success",
-        "is_reproducible_experiment": True,
-        "dataset_summary": {
-            "geographic_location": "Bengaluru (12.9716°N, 77.5946°E, Elevation ~915m ASL)",
-            "source": "Open-Meteo Historical Archive (ECMWF ERA5 & ERA5-Land Reanalysis)",
-            "observation_period": "2021-01-03 to 2023-12-30",
-            "total_observations": 26208,
-            "total_supervised_records": 26208,
-            "raw_downloaded_records": 26280,
-            "boundary_feature_dropped_records": 72,
-            "purged_embargo_records": 48,
-            "train_observations": 18321,
-            "val_observations": 3907,
-            "test_observations": 3932,
-            "evaluation_methodology": "Chronological Holdout Evaluation with 24-Hour Purge/Embargo Gap (Zero Target Leakage)",
-            "train_val_test_split": "Train (18321) / Val (3907) / Test (3932)",
-            "primary_targets": ["temperature_2m (24h ahead)", "precipitation event >= 0.1mm (24h ahead)"],
-        },
-        "model_comparison": [
-            {
-                "model": "Persistence Baseline (t-h)",
-                "mae_1h": 0.82,
-                "mae_6h": 4.03,
-                "mae_24h": 0.75,
-                "rmse_24h": 1.07,
-                "pinball_loss_q50": 0.37,
-                "brier_score_rain": 0.158,
-            },
-            {
-                "model": "Climatological Diurnal Mean Baseline",
-                "mae_1h": 1.56,
-                "mae_6h": 1.56,
-                "mae_24h": 1.55,
-                "rmse_24h": 1.94,
-                "pinball_loss_q50": 0.78,
-                "brier_score_rain": 0.158,
-            },
-            {
-                "model": "Trained XGBoost Point Regressor",
-                "mae_1h": 0.36,
-                "mae_6h": 0.80,
-                "mae_24h": 0.82,
-                "rmse_24h": 1.07,
-                "pinball_loss_q50": 0.42,
-                "brier_score_rain": 0.123,
-            },
-            {
-                "model": "XGBoost Quantile Regressor (P50 Median)",
-                "mae_1h": None,
-                "mae_6h": None,
-                "mae_24h": 0.74,
-                "rmse_24h": 1.00,
-                "pinball_loss_q50": 0.37,
-                "brier_score_rain": 0.123,
-            },
-        ],
-        "uncertainty_quantification": {
-            "nominal_interval": "80% Prediction Interval [P10, P90]",
-            "empirical_coverage": 72.9,
-            "mean_interval_width_c": 2.18,
-            "split_conformal_calibration": {
-                "calibrated_coverage_pct": 82.1,
-                "calibrated_mean_interval_width_c": 2.60,
-                "conformal_adjustment_margin_c": 0.21,
-            }
-        },
-        "calibration_curve": [
-            {"nominal_quantile": 0.10, "empirical_coverage": 0.075, "pinball_loss": 0.183},
-            {"nominal_quantile": 0.25, "empirical_coverage": 0.180, "pinball_loss": 0.310},
-            {"nominal_quantile": 0.50, "empirical_coverage": 0.393, "pinball_loss": 0.367},
-            {"nominal_quantile": 0.75, "empirical_coverage": 0.635, "pinball_loss": 0.287},
-            {"nominal_quantile": 0.90, "empirical_coverage": 0.804, "pinball_loss": 0.167},
-        ],
-        "ablation_study": [
-            {"configuration": "Layer 1: Raw Weather Observations Only", "mae_24h": 0.77, "improvement": "Baseline (Compact 5-Feature)"},
-            {"configuration": "Layer 2: + Cyclical Solar & Calendar Encodings", "mae_24h": 0.83, "improvement": "+7.7% vs Layer 1"},
-            {"configuration": "Layer 3: + Autoregressive Lags (t-1h..t-48h)", "mae_24h": 0.80, "improvement": "+4.7% vs Layer 1"},
-            {"configuration": "Layer 4: Full Multi-Modal (Lags + Rolling Windows + Gradients)", "mae_24h": 0.81, "improvement": "+5.2% vs Layer 1"},
-        ],
-        "execution_notes": {
-            "framework": "XGBoost 3.2.0 + SHAP 0.50.0",
-            "pytorch_lstm_status": "Omitted due to native runtime DLL conflict on host system (torch.c10.dll WinError 1114). Documented honestly in scientific report.",
-        }
-    }
+    # No embedded copy of the results: serving stale hardcoded numbers as a
+    # "reproducible experiment" would misrepresent what is on disk.
+    raise HTTPException(
+        status_code=503,
+        detail="Benchmark results not found or unreadable. Run 'python ml/train.py' to regenerate ml/artifacts/benchmark_results.json.",
+    )
 
