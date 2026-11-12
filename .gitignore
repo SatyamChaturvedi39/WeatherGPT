@@ -53,6 +53,7 @@ data/*.csv
 
 # ── ChromaDB persistence ────────────────────────────────────
 chroma_data/
+crowd_data/
 backend/cache/
 
 # ── Jupyter ──────────────────────────────────────────────────
@@ -73,7 +74,7 @@ WeatherGPT_Project_Plan.docx
 # ── Local Reports, Audits & Architecture Documents ───────────
 WeatherGPT_*.md
 FINAL_*.md
-PROJECT_*.md
+PROJECT_*.md
 *.pptx
 create_presentation.py
 

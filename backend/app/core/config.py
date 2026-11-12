@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # Fallback: Google Gemini Flash
     GEMINI_API_KEY: str = ""
 
+    # ── Crowd reports (SQLite, flood twin feedback loop) ─────────
+    CROWD_DB_PATH: str = "./crowd_data/crowd_reports.db"
+
     # ── ChromaDB (Vector Store) ──────────────────────────────────
     CHROMA_PERSIST_DIR: str = "./chroma_data"
 
