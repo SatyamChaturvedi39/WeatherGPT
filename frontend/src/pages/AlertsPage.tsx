@@ -113,16 +113,22 @@ export const AlertsPage: React.FC<Props> = ({ location }) => {
             )}
           </Card>
 
-          <Card title="Last 7 days" subtitle="Resolved alerts" headerAction={<History className="h-4 w-4 text-text-muted" />}>
+          <Card title="Last 7 days" subtitle="Alerts recorded for this location" headerAction={<History className="h-4 w-4 text-text-muted" />}>
             {history.isLoading && <Skeleton className="h-24 w-full" />}
-            {history.data && history.data.length === 0 && <p className="text-sm text-text-muted">No alerts in this period.</p>}
+            {history.data && history.data.length === 0 && (
+              <p className="text-sm text-text-muted">No alerts recorded here yet. History builds up as this location is checked.</p>
+            )}
             <ul className="divide-y divide-border-subtle">
               {history.data?.map((h) => (
                 <li key={h.id} className="flex items-center justify-between gap-3 py-2.5">
                   <div>
                     <div className="text-sm text-text-primary">{h.title}</div>
                     <div className="text-2xs tabular-nums text-text-muted">
-                      {new Date(h.date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })} · peak {h.peak_value}
+                      {new Date(h.date).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      {' · '}
+                      {h.resolved_at
+                        ? `cleared ${new Date(h.resolved_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`
+                        : 'ongoing'}
                     </div>
                   </div>
                   <Badge variant={severityVariant(h.severity)} size="sm">{h.severity}</Badge>

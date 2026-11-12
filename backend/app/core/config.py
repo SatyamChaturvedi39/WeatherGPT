@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # ── Crowd reports (SQLite, flood twin feedback loop) ─────────
     CROWD_DB_PATH: str = "./crowd_data/crowd_reports.db"
 
+    # ── Alert history (SQLite, episodes recorded by the risk engine) ──
+    ALERT_HISTORY_DB_PATH: str = "./crowd_data/alert_history.db"
+
     # ── ChromaDB (Vector Store) ──────────────────────────────────
     CHROMA_PERSIST_DIR: str = "./chroma_data"
 

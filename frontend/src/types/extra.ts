@@ -99,8 +99,10 @@ export interface AlertHistoryItem {
   date: string;
   severity: Severity;
   title: string;
-  resolved_at: string;
-  peak_value: string;
+  description: string;
+  last_seen: string;
+  /** null while the alert is still active */
+  resolved_at: string | null;
 }
 
 export interface AirQuality {
