@@ -64,6 +64,8 @@
         "test_raw_nwp_mae_same_rows": 1.075,
         "gain_vs_persistence_pct": 7.0,
         "test_rows_with_nwp": 3884,
+        "conformal_interval_80_margin_c": 1.18,
+        "conformal_interval_80_test_coverage_pct": 81.8,
         "nwp_source": "Open-Meteo Previous Runs API (temperature_2m_previous_day1)"
       }
     }

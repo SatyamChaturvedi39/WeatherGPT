@@ -1,6 +1,8 @@
 {
   "bias_window_days": 14,
   "persistence_blend_weight": 0.65,
+  "conformal_interval_80_margin_c": 1.182,
+  "conformal_interval_80_test_coverage_pct": 81.8,
   "features": [
     "temperature_2m",
     "relative_humidity_2m",

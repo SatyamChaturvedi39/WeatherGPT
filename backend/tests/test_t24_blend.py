@@ -60,3 +60,22 @@ def test_trained_nwp_model_loads():
     assert models["nwp_model"] is not None
     assert models["nwp_config"]["bias_window_days"] in (7, 14)
     assert len(models["nwp_config"]["features"]) == len(models["feature_names"]) + 1
+
+
+def test_interval_centred_on_published_value_with_nwp_model():
+    from app.api.forecast import t24_interval
+
+    models = {"calibration": {"margin_c": 0.21, "calibrated_coverage_pct": 82.1, "quantile_index": 1, "validation_size": 2},
+              "nwp_config": {"conformal_interval_80_margin_c": 1.2, "conformal_interval_80_test_coverage_pct": 81.8}}
+    iv = t24_interval(models, {"method": "nwp_corrected"}, published=11.0, q10=16.0, q90=19.0)
+    assert iv["calibrated_lower_c"] == 9.8 and iv["calibrated_upper_c"] == 12.2
+    assert iv["calibrated_lower_c"] <= 11.0 <= iv["calibrated_upper_c"]
+    fallback = t24_interval(models, {"method": "station_blend"}, published=17.0, q10=16.0, q90=19.0)
+    assert fallback["calibrated_lower_c"] == 15.79 and fallback["method"] == "conformal_station_quantiles"
+
+
+def test_training_domain_flag():
+    from app.api.forecast import training_domain
+
+    assert training_domain(12.97, 77.6)["in_domain"]
+    assert not training_domain(40.71, -74.0)["in_domain"]

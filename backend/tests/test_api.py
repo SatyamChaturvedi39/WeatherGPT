@@ -119,10 +119,19 @@ class TestForecastAPI:
         assert data["quantile_forecast_c"]["raw_empirical_coverage_pct"] == 72.9
         assert "split_conformal_interval_80" in data
         conformal = data["split_conformal_interval_80"]
-        assert conformal["conformal_adjustment_margin_c"] == 0.21
-        assert conformal["calibrated_empirical_coverage_pct"] == 82.1
-        assert conformal["validation_sample_size"] == 3907
-        assert conformal["finite_sample_quantile_index"] == 3127
+        assert conformal["calibrated_lower_c"] <= data["point_temperature_c"] <= conformal["calibrated_upper_c"] or \
+            conformal["method"] == "conformal_station_quantiles"
+        if conformal["method"] == "conformal_around_nwp_model":
+            import json
+            cfg = json.load(open("ml/artifacts/t24_nwp.json"))
+            assert conformal["conformal_adjustment_margin_c"] == round(cfg["conformal_interval_80_margin_c"], 2)
+            assert conformal["calibrated_empirical_coverage_pct"] == cfg["conformal_interval_80_test_coverage_pct"]
+        else:
+            assert conformal["conformal_adjustment_margin_c"] == 0.21
+            assert conformal["calibrated_empirical_coverage_pct"] == 82.1
+            assert conformal["validation_sample_size"] == 3907
+            assert conformal["finite_sample_quantile_index"] == 3127
+        assert data["training_domain"]["in_domain"] is True
         assert data["feature_provenance"] in ["recent_past_forecast", "heuristic_fallback"]
         assert "scientific_disclaimer" in data
         assert "data_source_accounting" in data

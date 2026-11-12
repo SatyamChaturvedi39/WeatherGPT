@@ -282,7 +282,14 @@ def run_benchmark():
             cv, ct = val_df["temperature_2m"].values[ok_va], test_df["temperature_2m"].values[ok_te]
             maes = [mean_absolute_error(yv, w * pv + (1 - w) * cv) for w in blend_grid]
             w_n = float(blend_grid[int(np.argmin(maes))])
+            # Split-conformal 80% interval around the published (blended) value, from validation residuals
+            val_abs = np.sort(np.abs(yv - (w_n * pv + (1 - w_n) * cv)))
+            k_n = int(np.ceil((len(val_abs) + 1) * 0.80))
+            margin_n = float(val_abs[min(k_n, len(val_abs)) - 1])
+            test_pub = w_n * pt + (1 - w_n) * ct
             candidates.append({
+                "interval_margin_c": margin_n,
+                "interval_test_coverage_pct": float(np.mean(np.abs(yt - test_pub) <= margin_n) * 100),
                 "window_d": window_d, "model": m_n, "w": w_n, "val_mae": float(min(maes)),
                 "test_mae": float(mean_absolute_error(yt, w_n * pt + (1 - w_n) * ct)),
                 "test_rmse": float(np.sqrt(mean_squared_error(yt, w_n * pt + (1 - w_n) * ct))),
@@ -304,6 +311,8 @@ def run_benchmark():
             "test_raw_nwp_mae_same_rows": round(nwp_result["test_raw_nwp_mae"], 3),
             "gain_vs_persistence_pct": round(nwp_gain, 1),
             "test_rows_with_nwp": nwp_result["test_rows"],
+            "conformal_interval_80_margin_c": round(nwp_result["interval_margin_c"], 2),
+            "conformal_interval_80_test_coverage_pct": round(nwp_result["interval_test_coverage_pct"], 1),
             "nwp_source": "Open-Meteo Previous Runs API (temperature_2m_previous_day1)",
         }
         print(f"  Selected NWP model: {nwp_result['window_d']}d bias window -> test MAE {nwp_result['test_mae']:.3f}°C "
@@ -520,6 +529,8 @@ def run_benchmark():
             json.dump({
                 "bias_window_days": nwp_result["window_d"],
                 "persistence_blend_weight": nwp_result["w"],
+                "conformal_interval_80_margin_c": round(nwp_result["interval_margin_c"], 3),
+                "conformal_interval_80_test_coverage_pct": round(nwp_result["interval_test_coverage_pct"], 1),
                 "features": feature_cols + ["nwp_t24_bias_corrected"],
                 "target": "temperature_2m(t+24) - nwp_t24_bias_corrected",
                 "formula": "y_hat = w * (xgboost_t24_nwp(x, nwp_corr) + nwp_corr) + (1 - w) * temperature_2m(t)",

@@ -106,6 +106,50 @@ def t24_point_forecast(models: dict, x, current_temp: float, nwp: dict | None) -
     }
 
 
+# Where the models were trained; forecasts far from here are out of domain
+TRAINING_SITE = (12.9716, 77.5946)
+TRAINING_DOMAIN_KM = 150.0
+
+
+def training_domain(lat: float, lon: float) -> dict:
+    d = departure.haversine_km(lat, lon, *TRAINING_SITE)
+    return {
+        "trained_on": "Bengaluru (12.97°N, 77.59°E), 2021-2023",
+        "distance_km": round(d, 1),
+        "in_domain": d <= TRAINING_DOMAIN_KM,
+    }
+
+
+def t24_interval(models: dict, point: dict, published: float, q10: float, q90: float) -> dict:
+    """
+    80% interval for the published T+24h value. With the NWP model: split-conformal
+    margin calibrated on its own validation residuals, centred on the published value.
+    Otherwise: station quantile models widened by their conformal margin.
+    """
+    cal = models["calibration"]
+    cfg = models.get("nwp_config") or {}
+    if point["method"] == "nwp_corrected" and "conformal_interval_80_margin_c" in cfg:
+        m = float(cfg["conformal_interval_80_margin_c"])
+        lo, hi = published - m, published + m
+        return {
+            "method": "conformal_around_nwp_model",
+            "calibrated_empirical_coverage_pct": cfg.get("conformal_interval_80_test_coverage_pct"),
+            "conformal_adjustment_margin_c": round(m, 2),
+            "calibrated_lower_c": round(lo, 2),
+            "calibrated_upper_c": round(hi, 2),
+        }
+    lo, hi = q10 - cal["margin_c"], q90 + cal["margin_c"]
+    return {
+        "method": "conformal_station_quantiles",
+        "calibrated_empirical_coverage_pct": cal["calibrated_coverage_pct"],
+        "conformal_adjustment_margin_c": cal["margin_c"],
+        "calibrated_lower_c": round(lo, 2),
+        "calibrated_upper_c": round(hi, 2),
+        "finite_sample_quantile_index": cal["quantile_index"],
+        "validation_sample_size": cal["validation_size"],
+    }
+
+
 def get_all_ml_models():
     """Load all trained XGBoost models, quantile regressors, precipitation classifier, and TreeSHAP explainer lazily."""
     global _cached_models_dict
@@ -488,8 +532,8 @@ async def explain_forecast(
             q50_val = float(models["q50"].predict(x)[0])
             q90_val = float(models["q90"].predict(x)[0])
             rain_prob = float(models["precip"].predict_proba(x)[0][1])
-            conformal_lower = round(q10_val - cal["margin_c"], 2)
-            conformal_upper = round(q90_val + cal["margin_c"], 2)
+            interval = t24_interval(models, point, predicted_temp, q10_val, q90_val)
+            conformal_lower, conformal_upper = interval["calibrated_lower_c"], interval["calibrated_upper_c"]
 
             # Human-readable feature descriptions
             meta_descriptions = {
@@ -547,8 +591,9 @@ async def explain_forecast(
                 "confidence_level": "80% Calibrated Prediction Interval",
                 "split_conformal_interval_80": {
                     "nominal_coverage_pct": 80.0,
-                    "calibrated_empirical_coverage_pct": cal["calibrated_coverage_pct"],
-                    "conformal_adjustment_margin_c": cal["margin_c"],
+                    "calibrated_empirical_coverage_pct": interval["calibrated_empirical_coverage_pct"],
+                    "conformal_adjustment_margin_c": interval["conformal_adjustment_margin_c"],
+                    "method": interval["method"],
                     "lower_bound_c": conformal_lower,
                     "upper_bound_c": conformal_upper,
                     "raw_p10_c": round(q10_val, 2),
@@ -613,8 +658,7 @@ async def get_ml_prediction(
         q90_pred = float(models["q90"].predict(x)[0])
         rain_prob = float(models["precip"].predict_proba(x)[0][1])
 
-        conformal_lower = round(q10_pred - cal["margin_c"], 2)
-        conformal_upper = round(q90_pred + cal["margin_c"], 2)
+        interval = t24_interval(models, point, predicted_point, q10_pred, q90_pred)
 
         await record_forecast(lat, lon, predicted_point, current_temp, rain_probability=rain_prob)
 
@@ -625,6 +669,7 @@ async def get_ml_prediction(
             "forecast_origin_utc": now_utc.isoformat(),
             "point_temperature_c": round(predicted_point, 2),
             "point_forecast_method": {**point, "current_temperature_c": round(current_temp, 2)},
+            "training_domain": training_domain(lat, lon),
             "quantile_forecast_c": {
                 "p10": round(q10_pred, 2),
                 "p50_median": round(q50_pred, 2),
@@ -634,13 +679,8 @@ async def get_ml_prediction(
             },
             "split_conformal_interval_80": {
                 "nominal_coverage_pct": 80.0,
-                "calibrated_empirical_coverage_pct": cal["calibrated_coverage_pct"],
-                "conformal_adjustment_margin_c": cal["margin_c"],
-                "calibrated_lower_c": conformal_lower,
-                "calibrated_upper_c": conformal_upper,
-                "calibrated_interval_width_c": round(conformal_upper - conformal_lower, 2),
-                "finite_sample_quantile_index": cal["quantile_index"],
-                "validation_sample_size": cal["validation_size"]
+                **interval,
+                "calibrated_interval_width_c": round(interval["calibrated_upper_c"] - interval["calibrated_lower_c"], 2),
             },
             "precipitation_risk_24h": {
                 "target": "Rainfall occurrence >= 0.1 mm/h",
