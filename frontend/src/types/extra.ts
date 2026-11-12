@@ -160,3 +160,50 @@ export interface Benchmarks {
   model_comparison: Array<Record<string, any>>;
   scientific_notes?: Record<string, string>;
 }
+
+export type FloodLevel = 'Clear' | 'Watch' | 'Warning' | 'Severe';
+
+export interface FloodTimelinePoint {
+  time: string;
+  rain_forecast_mm: number;
+  rain_probability: number;
+  rain_sampled_mean_mm: number;
+  p_waterlog: number;
+  p_severe: number;
+  depth_cm: { p10: number; p50: number; p90: number };
+  level: FloodLevel;
+  p_waterlog_uncorrected?: number;
+}
+
+export interface FloodZone {
+  id: string;
+  name: string;
+  zone: string;
+  latitude: number;
+  longitude: number;
+  elevation: number;
+  vulnerability: string;
+  hydrology: { drain_capacity_mm_h: number; runoff_coefficient: number; basin_inflow_factor: number };
+  correction: { rain_bias: number; initial_storage_mm: number; n_reports: number };
+  timeline: FloodTimelinePoint[];
+  peak: { time: string; p_waterlog: number; level: FloodLevel };
+}
+
+export interface FloodTwin {
+  zones: FloodZone[];
+  city_timeline: Array<{ time: string; zones_watch: number; zones_warning: number; zones_severe: number }>;
+  parameters: Record<string, any>;
+  is_simulation: boolean;
+  crowd: { reports_in_window: number; window_hours: number; zones_corrected: number };
+  source: Record<string, string>;
+}
+
+export type CrowdReportType = 'dry' | 'raining' | 'heavy_rain' | 'waterlogged';
+
+export interface CrowdReport {
+  id: string;
+  zone_id: string;
+  zone_name: string;
+  report_type: CrowdReportType;
+  created_at: number;
+}

@@ -35,6 +35,9 @@ import type {
   AirQuality,
   MlPrediction,
   Benchmarks,
+  FloodTwin,
+  CrowdReport,
+  CrowdReportType,
 } from '../types/extra';
 
 const API_BASE = '/api';
@@ -60,6 +63,20 @@ function safeParse<T>(schema: { parse: (v: unknown) => T }, value: unknown, labe
   } catch (err) {
     console.warn(`Validation fallback for ${label}:`, err);
     return schema.parse({});
+  }
+}
+
+/** Anonymous per-browser id, used only for report rate limiting. */
+function crowdClientId(): string {
+  const key = 'weathergpt.crowdClientId';
+  try {
+    const existing = localStorage.getItem(key);
+    if (existing) return existing;
+    const id = crypto.randomUUID();
+    localStorage.setItem(key, id);
+    return id;
+  } catch {
+    return `anon-${Math.random().toString(36).slice(2, 12)}`;
   }
 }
 
@@ -381,4 +398,31 @@ export const api = {
     getJson(`${API_BASE}/forecast/ml-prediction?${q(lat, lon)}`),
 
   getBenchmarks: async (): Promise<Benchmarks> => getJson(`${API_BASE}/forecast/benchmarks`),
+
+  getFloodTwin: async (hours = 6, scenarioMm = 0): Promise<FloodTwin> => {
+    const json = await getJson(`${API_BASE}/flood/twin?hours=${hours}&scenario_mm=${scenarioMm}`);
+    return json.data;
+  },
+
+  getFloodReports: async (): Promise<CrowdReport[]> => {
+    const json = await getJson(`${API_BASE}/flood/reports`);
+    return json.reports ?? [];
+  },
+
+  submitFloodReport: async (
+    reportType: CrowdReportType,
+    where: { zoneId: string } | { lat: number; lon: number }
+  ): Promise<CrowdReport> => {
+    const body = {
+      report_type: reportType,
+      client_id: crowdClientId(),
+      ...('zoneId' in where ? { zone_id: where.zoneId } : { latitude: where.lat, longitude: where.lon }),
+    };
+    const json = await getJson(`${API_BASE}/flood/reports`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return json.report;
+  },
 };

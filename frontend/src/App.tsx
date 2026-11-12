@@ -12,6 +12,7 @@ import { AdminPage } from './pages/AdminPage';
 import LandingPage from './landing/LandingPage';
 import { RoutePage } from './pages/RoutePage';
 import { MicroclimatesPage } from './pages/MicroclimatesPage';
+import { FloodTwinPage } from './pages/FloodTwinPage';
 import { AlertsPage } from './pages/AlertsPage';
 import { BenchmarksPage } from './pages/BenchmarksPage';
 import { SavedLocation } from './types';
@@ -270,6 +271,7 @@ const AppContent: React.FC = () => {
             />
             <Route path="/route" element={<RoutePage />} />
             <Route path="/microclimates" element={<MicroclimatesPage />} />
+            <Route path="/flood-twin" element={<FloodTwinPage />} />
             <Route path="/benchmarks" element={<BenchmarksPage />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>

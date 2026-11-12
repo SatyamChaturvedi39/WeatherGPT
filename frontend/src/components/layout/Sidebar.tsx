@@ -10,6 +10,7 @@ import {
   MapPinned,
   Siren,
   BarChart3,
+  Waves,
 } from 'lucide-react';
 
 export const Sidebar: React.FC<{ skyLabel?: string }> = ({ skyLabel }) => {
@@ -19,6 +20,7 @@ export const Sidebar: React.FC<{ skyLabel?: string }> = ({ skyLabel }) => {
     { to: '/alerts', label: 'Alerts', icon: <Siren className="w-4 h-4 stroke-[1.75]" /> },
     { to: '/route', label: 'Route Shield', icon: <Navigation className="w-4 h-4 stroke-[1.75]" /> },
     { to: '/microclimates', label: 'Microclimates', icon: <MapPinned className="w-4 h-4 stroke-[1.75]" /> },
+    { to: '/flood-twin', label: 'Flood Twin', icon: <Waves className="w-4 h-4 stroke-[1.75]" /> },
     { to: '/chat', label: 'Weather Chat', icon: <MessageSquare className="w-4 h-4 stroke-[1.75]" /> },
     { to: '/benchmarks', label: 'Benchmarks', icon: <BarChart3 className="w-4 h-4 stroke-[1.75]" /> },
     { to: '/settings', label: 'Settings', icon: <SettingsIcon className="w-4 h-4 stroke-[1.75]" /> },

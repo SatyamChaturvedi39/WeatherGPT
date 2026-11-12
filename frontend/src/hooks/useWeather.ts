@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { PlatformSettings } from '../types';
+import type { CrowdReportType } from '../types/extra';
 
 export function useCurrentWeather(lat: number, lon: number) {
   return useQuery({
@@ -72,6 +73,31 @@ export function useRouteForecast(origin: string, destination: string, mode: stri
 
 export function useMicroclimates() {
   return useQuery({ queryKey: ['microclimates'], queryFn: api.getMicroclimates, staleTime: 1000 * 60 * 10 });
+}
+
+export function useFloodTwin(hours = 6, scenarioMm = 0) {
+  return useQuery({
+    queryKey: ['flood-twin', hours, scenarioMm],
+    queryFn: () => api.getFloodTwin(hours, scenarioMm),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useFloodReports() {
+  return useQuery({ queryKey: ['flood-reports'], queryFn: api.getFloodReports, refetchInterval: 1000 * 60 });
+}
+
+export function useSubmitFloodReport() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ type, where }: { type: CrowdReportType; where: { zoneId: string } | { lat: number; lon: number } }) =>
+      api.submitFloodReport(type, where),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['flood-reports'] });
+      queryClient.invalidateQueries({ queryKey: ['flood-twin'] });
+    },
+  });
 }
 
 export function useAlertsCenter(lat: number, lon: number) {
