@@ -138,6 +138,6 @@ export const ChatResponseSchema = z.object({
   session_id: z.string().default(''),
   answer: z.string().default(''),
   sources: z.array(z.string()).default([]),
-  confidence: z.coerce.number().default(1),
+  confidence: z.number().nullable().default(null),
   is_fallback: z.boolean().default(false),
 });

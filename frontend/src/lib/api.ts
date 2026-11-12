@@ -293,7 +293,7 @@ export const api = {
         session_id: payload.session_id,
         answer: json?.reply ?? json?.answer ?? '',
         sources: sources.map((s) => (typeof s === 'string' ? s : s.title || s.source || 'source')),
-        confidence: json?.confidence,
+        confidence: json?.confidence ?? null,
         is_fallback: false,
       },
       'chat'

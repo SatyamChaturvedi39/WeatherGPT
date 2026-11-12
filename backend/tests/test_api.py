@@ -221,7 +221,7 @@ class TestChatAPI:
     """Tests for chat endpoint."""
 
     def test_chat_grounded_response(self):
-        """Chat endpoint should return a grounded response with confidence."""
+        """Chat endpoint should return a grounded response without an invented confidence."""
         response = client.post(
             "/api/chat/",
             json={
@@ -234,7 +234,8 @@ class TestChatAPI:
         assert "reply" in data
         assert len(data["reply"]) > 0
         assert "confidence" in data
-        assert data["confidence"] > 0
+        # No calibrated confidence is produced, so none may be claimed
+        assert data["confidence"] is None
 
 
 class TestAlertsAPI:

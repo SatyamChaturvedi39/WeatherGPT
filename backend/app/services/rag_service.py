@@ -248,7 +248,6 @@ class RAGService:
                     "Please ask me about weather, flight disruptions, or commute routes for any location!"
                 ),
                 "sources": [],
-                "confidence": 0.98,
                 "detected_location": None,
             }
 
@@ -603,7 +602,6 @@ class RAGService:
         return {
             "reply": synthesis,
             "sources": sources,
-            "confidence": 0.98,
             "detected_location": origin_loc,
         }
 
@@ -632,7 +630,6 @@ class RAGService:
             return {
                 "reply": f"Could not retrieve 7-day extended forecasts for {full_loc} at this moment.",
                 "sources": sources,
-                "confidence": 0.85,
                 "detected_location": location,
             }
 
@@ -681,7 +678,6 @@ class RAGService:
         return {
             "reply": reply,
             "sources": sources,
-            "confidence": 0.97,
             "detected_location": location,
         }
 
@@ -954,7 +950,6 @@ class RAGService:
         return {
             "reply": reply,
             "sources": sources,
-            "confidence": 0.98,
             "detected_location": origin_loc,
         }
 
@@ -993,7 +988,6 @@ class RAGService:
         return {
             "reply": reply,
             "sources": sources,
-            "confidence": 0.97,
             "detected_location": loc1,
         }
 
@@ -1020,7 +1014,6 @@ class RAGService:
                     "You can specify any city, airport, or route in your prompt (e.g. *'Flight from Bangalore to Delhi cancellation risk'* or *'Weather in Paris'*)."
                 ),
                 "sources": [],
-                "confidence": 0.90,
                 "detected_location": None,
             }
 
@@ -1128,7 +1121,6 @@ class RAGService:
         return {
             "reply": answer,
             "sources": sources,
-            "confidence": 0.96,
             "detected_location": location,
         }
 
@@ -1168,7 +1160,6 @@ class RAGService:
                     return {
                         "reply": reply,
                         "sources": sources,
-                        "confidence": 0.98,
                         "provider": "Groq Llama-3 (Grounded)",
                         "detected_location": location,
                     }
@@ -1199,7 +1190,6 @@ class RAGService:
                     return {
                         "reply": reply,
                         "sources": sources,
-                        "confidence": 0.98,
                         "provider": "Google Gemini Flash (Grounded)",
                         "detected_location": location,
                     }

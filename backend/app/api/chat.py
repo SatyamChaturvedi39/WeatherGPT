@@ -32,7 +32,8 @@ class ChatResponse(BaseModel):
     """Chat response with source citations, grounding confidence, and location."""
     reply: str
     sources: list[dict[str, Any]] = []
-    confidence: float = 1.0
+    # Only set when a calibrated estimate exists; the pipeline does not produce one today
+    confidence: float | None = None
     detected_location: dict[str, Any] | None = None
 
 
@@ -71,6 +72,6 @@ async def chat(request: ChatRequest):
     return ChatResponse(
         reply=result.get("reply", ""),
         sources=result.get("sources", []),
-        confidence=result.get("confidence", 0.95),
+        confidence=result.get("confidence"),
         detected_location=result.get("detected_location"),
     )

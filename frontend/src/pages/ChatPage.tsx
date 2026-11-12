@@ -69,7 +69,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ location, activity }) => {
         sender: 'assistant',
         text: res.answer,
         sources: res.sources,
-        confidence: res.confidence,
+        confidence: res.confidence ?? undefined,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => [...prev, assistantMsg]);
@@ -128,7 +128,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ location, activity }) => {
                 {msg.sender === 'assistant' && (
                   <div className="mt-2.5 pt-2 border-t border-border-subtle flex flex-wrap items-center justify-between gap-2 text-2xs text-text-muted">
                     <div className="flex flex-wrap gap-1 items-center">
-                      <span>Source:</span>
+                      {!!msg.sources?.length && <span>Source:</span>}
                       {msg.sources?.map((s, idx) => (
                         <span
                           key={idx}
@@ -138,7 +138,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ location, activity }) => {
                         </span>
                       ))}
                     </div>
-                    {msg.confidence !== undefined && (
+                    {typeof msg.confidence === 'number' && (
                       <span className="font-mono tabular-nums text-text-muted">
                         Confidence: <strong>{Math.round(msg.confidence * 100)}%</strong>
                       </span>
