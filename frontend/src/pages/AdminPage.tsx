@@ -126,8 +126,18 @@ export const AdminPage: React.FC = () => {
                     <td className="py-2.5 px-5 font-mono tabular-nums text-text-muted">
                       {h.crps !== undefined && h.crps !== null ? formatNumber(h.crps, 2) : '—'}
                     </td>
-                    <td className="py-2.5 px-5 font-mono text-emerald-600 dark:text-emerald-400">
-                      {h.gain_vs_persistence_pct != null ? `-${formatNumber(h.gain_vs_persistence_pct, 1)}% error vs pers.` : '—'}
+                    <td
+                      className={`py-2.5 px-5 font-mono ${
+                        h.gain_vs_persistence_pct == null
+                          ? 'text-text-muted'
+                          : h.gain_vs_persistence_pct >= 0
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-red-600 dark:text-red-400'
+                      }`}
+                    >
+                      {h.gain_vs_persistence_pct == null
+                        ? '—'
+                        : `${h.gain_vs_persistence_pct >= 0 ? '−' : '+'}${formatNumber(Math.abs(h.gain_vs_persistence_pct), 1)}% error vs pers.`}
                     </td>
                   </tr>
                 ))
