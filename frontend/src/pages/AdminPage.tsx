@@ -127,7 +127,7 @@ export const AdminPage: React.FC = () => {
                       {h.crps !== undefined && h.crps !== null ? formatNumber(h.crps, 2) : '—'}
                     </td>
                     <td className="py-2.5 px-5 font-mono text-emerald-600 dark:text-emerald-400">
-                      {model.model_name.includes('baseline') ? 'Baseline' : '-35% error vs pers.'}
+                      {h.gain_vs_persistence_pct != null ? `-${formatNumber(h.gain_vs_persistence_pct, 1)}% error vs pers.` : '—'}
                     </td>
                   </tr>
                 ))

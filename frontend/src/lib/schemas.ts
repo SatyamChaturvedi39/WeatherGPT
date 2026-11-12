@@ -123,6 +123,7 @@ export const AdminStatusSchema = z.object({
           rmse: z.coerce.number(),
           crps: z.coerce.number().nullable().optional(),
           brier_score: z.coerce.number().nullable().optional(),
+          gain_vs_persistence_pct: z.number().nullable().optional(),
         })
       ).default([]),
       overall_mae: z.coerce.number().default(0),

@@ -42,7 +42,12 @@ def _benchmark_rows() -> list[dict]:
     for r in rows:
         try:
             hours = int(str(r["horizon"]).strip("T+h"))
-            out.append({"horizon_hours": hours, "mae": r["xgboost_mae"], "rmse": r["xgboost_rmse"]})
+            out.append({
+                "horizon_hours": hours,
+                "mae": r["xgboost_mae"],
+                "rmse": r["xgboost_rmse"],
+                "gain_vs_persistence_pct": r.get("xgboost_gain_vs_persistence_pct"),
+            })
         except (KeyError, ValueError):
             continue
     return out
