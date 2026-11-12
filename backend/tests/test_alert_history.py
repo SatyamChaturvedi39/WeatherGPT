@@ -52,6 +52,12 @@ class TestAlertHistoryStore:
         store.record(LAT, LON, [_alert("wind")], now=NOW + 7200)
         assert len(store.history(LAT, LON, 7, now=NOW + 7200)) == 2
 
+    def test_all_clear_status_is_not_recorded(self, tmp_path):
+        store = AlertHistoryStore(str(tmp_path / "a.db"))
+        all_clear = {**_alert("normal-baseline", "LOW"), "alert_type": "favorable_weather"}
+        store.record(LAT, LON, [all_clear], now=NOW)
+        assert store.history(LAT, LON, 7, now=NOW) == []
+
     def test_history_is_per_location_and_window(self, tmp_path):
         store = AlertHistoryStore(str(tmp_path / "a.db"))
         store.record(LAT, LON, [_alert("wind")], now=NOW)

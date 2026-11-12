@@ -21,6 +21,7 @@ import uuid
 from pathlib import Path
 
 SEVERITY_RANK = {"LOW": 0, "MODERATE": 1, "HIGH": 2, "EXTREME": 3}
+NON_HAZARD_TYPES = {"favorable_weather"}
 
 
 def location_key(lat: float, lon: float) -> str:
@@ -63,7 +64,12 @@ class AlertHistoryStore:
         """Reconcile the currently active alerts for a location with stored events."""
         now = now if now is not None else time.time()
         key = location_key(lat, lon)
-        active = {a["id"]: a for a in alerts if a.get("id")}
+        # The risk engine emits an all-clear "favorable_weather" status when
+        # nothing is wrong; that is not an alert episode worth logging.
+        active = {
+            a["id"]: a for a in alerts
+            if a.get("id") and a.get("alert_type") not in NON_HAZARD_TYPES
+        }
 
         with self._connect() as conn:
             open_rows = conn.execute(
