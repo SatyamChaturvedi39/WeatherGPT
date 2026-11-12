@@ -109,12 +109,13 @@ export interface AirQuality {
   aqi: number;
   category: string;
   color: string;
-  pm2_5: number;
-  pm10: number;
-  nitrogen_dioxide: number;
-  ozone: number;
+  /** Pollutant readings are null when the upstream model has no value */
+  pm2_5: number | null;
+  pm10: number | null;
+  nitrogen_dioxide: number | null;
+  ozone: number | null;
   health_advisory: string;
-  dominant_pollutant: string;
+  dominant_pollutant: string | null;
 }
 
 export interface MlPrediction {

@@ -39,7 +39,7 @@ export const AirQualityCard: React.FC<Loc> = ({ lat, lon }) => {
             ].map(([k, v]) => (
               <div key={String(k)} className="rounded-btn bg-app-subtle py-1.5">
                 <div className="text-2xs text-text-muted">{k}</div>
-                <div className="text-sm font-semibold tabular-nums text-text-primary">{Number(v).toFixed(0)}</div>
+                <div className="text-sm font-semibold tabular-nums text-text-primary">{v == null ? '—' : Number(v).toFixed(0)}</div>
               </div>
             ))}
           </div>

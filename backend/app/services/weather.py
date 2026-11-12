@@ -1072,24 +1072,20 @@ class WeatherService:
             "timezone": "auto",
         }
 
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                res = await client.get(url, params=params)
-                res.raise_for_status()
-                data = res.json()
-            curr = data.get("current", {})
-            us_aqi = curr.get("us_aqi", 55)
-            pm2_5 = curr.get("pm2_5", 18.0)
-            pm10 = curr.get("pm10", 25.0)
-            no2 = curr.get("nitrogen_dioxide", 22.0)
-            o3 = curr.get("ozone", 15.0)
-        except Exception:
-            # Fallback estimation for Bangalore microclimates
-            us_aqi = 58
-            pm2_5 = 19.5
-            pm10 = 26.2
-            no2 = 32.0
-            o3 = 12.0
+        # No made-up fallback values: if the upstream call fails or returns no AQI,
+        # let the error propagate so the API reports "unavailable" honestly.
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.get(url, params=params)
+            res.raise_for_status()
+            data = res.json()
+        curr = data.get("current", {})
+        us_aqi = curr.get("us_aqi")
+        if us_aqi is None:
+            raise ValueError("Open-Meteo returned no US AQI for this location")
+        pm2_5 = curr.get("pm2_5")
+        pm10 = curr.get("pm10")
+        no2 = curr.get("nitrogen_dioxide")
+        o3 = curr.get("ozone")
 
         if us_aqi <= 50:
             category = "Good"
@@ -1121,12 +1117,27 @@ class WeatherService:
             "nitrogen_dioxide": no2,
             "ozone": o3,
             "health_advisory": advisory,
-            "dominant_pollutant": "PM2.5 (Fine Particulate Matter)",
+            "dominant_pollutant": self._dominant_pollutant(pm2_5, pm10, no2, o3),
             "timestamp": now,
         }
 
         self._cache[cache_key] = (now, result)
         return result
+
+    # WHO 2021 air-quality guideline levels (µg/m³): PM2.5/PM10/NO2 24-h, O3 8-h
+    _WHO_GUIDELINES = {
+        "PM2.5 (Fine Particulate Matter)": 15.0,
+        "PM10 (Coarse Particulate Matter)": 45.0,
+        "NO2 (Nitrogen Dioxide)": 25.0,
+        "O3 (Ozone)": 100.0,
+    }
+
+    @classmethod
+    def _dominant_pollutant(cls, pm2_5, pm10, no2, o3) -> str | None:
+        """Pollutant furthest above its WHO guideline level, or None if no readings."""
+        values = dict(zip(cls._WHO_GUIDELINES, (pm2_5, pm10, no2, o3)))
+        ratios = {k: v / cls._WHO_GUIDELINES[k] for k, v in values.items() if v is not None}
+        return max(ratios, key=ratios.get) if ratios else None
 
     async def get_bangalore_microclimates_summary(self) -> list[dict]:
         """
