@@ -359,7 +359,7 @@ function HoursTimeline({ hourly, onHourChange }) {
               </div>
               <div className="mt-2 flex justify-between text-[11px] text-white/60">
                 <span>Now</span>
-                <span>Shaded band = calibrated 80% interval</span>
+                <span>Shaded band = ensemble 10–90% spread</span>
                 <span>+{n - 1}h</span>
               </div>
             </Glass>

@@ -27,6 +27,13 @@ _cached_explain: dict[str, tuple[float, dict]] = {}
 _cached_ml_pred: dict[str, tuple[float, dict]] = {}
 
 
+ENSEMBLE_SPREAD_METADATA = {
+    "interval": "10th-90th percentile of the ECMWF IFS 0.25° ensemble (control + 50 members)",
+    "source": "Open-Meteo Ensemble API",
+    "calibration_note": "Raw ensemble spread, not calibrated against observations; ensembles are often under-dispersive at short lead times.",
+}
+
+
 def _load_calibration() -> dict:
     """Interval calibration numbers recorded by ml/train.py (single source of truth)."""
     with open(os.path.join(ARTIFACTS_DIR, "benchmark_results.json"), "r", encoding="utf-8") as f:
@@ -133,20 +140,14 @@ async def get_forecast_bundle(
     service = WeatherService()
     try:
         data = await service.get_forecast_bundle(lat, lon, hours=hours, days=days)
-        # Apply calibrated prediction interval ribbons to hourly
-        hourly_data = data.get("hourly", {})
-        if "hourly" in hourly_data:
-            points = hourly_data["hourly"]
-            if points:
-                temps = [p["temperature_2m"] for p in points if p.get("temperature_2m") is not None]
-                if temps:
-                    t_std = float(np.std(temps))
-                    margin = max(1.2, round(0.84 * t_std * 0.45, 1))
-                    for p in points:
-                        if p.get("temperature_2m") is not None:
-                            p["temp_lower_80"] = round(p["temperature_2m"] - margin, 1)
-                            p["temp_upper_80"] = round(p["temperature_2m"] + margin, 1)
-        return {"status": "success", "data": data}
+        # Temperature range from the ECMWF ensemble spread (P10-P90); null where unavailable
+        points = data.get("hourly", {}).get("hourly", [])
+        if points:
+            spread = await service.get_ensemble_temperature_spread(lat, lon, hours=min(hours, 360))
+            for p in points:
+                lo_hi = spread.get(p.get("time"))
+                p["temp_lower_80"], p["temp_upper_80"] = lo_hi if lo_hi else (None, None)
+        return {"status": "success", "data": data, "uncertainty_metadata": ENSEMBLE_SPREAD_METADATA}
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Weather bundle fetch failed: {str(e)}")
 
@@ -174,42 +175,27 @@ async def get_hourly_forecast(
     hours: int = Query(48, description="Number of hours to forecast", ge=1, le=168),
 ):
     """
-    Fetch hourly forecast data with calibrated 80% non-parametric prediction intervals.
-    Empirical coverage: 72.2% evaluated over 3,932 held-out test hours.
+    Fetch hourly forecast data with a temperature range from the ECMWF ensemble
+    spread (10th-90th percentile across 51 members).
     """
     service = WeatherService()
     try:
         data = await service.get_hourly_forecast(lat, lon, hours)
 
-        # Calibrated prediction interval expansion based on empirical holdout evaluation
-        # Mean interval width on test set is 2.19 °C at 24h horizon
         hourly = data.get("hourly", [])
-        for i, pt in enumerate(hourly):
-            t = pt.get("temperature_2m", 20.0)
-            if t is not None:
-                # Gradual dispersion from 0.8 °C (1h) to 1.1 °C (24h) to 1.5 °C (48h)
-                half_width = round(0.8 + (min(i, 48) * 0.015), 1)
-                pt["temperature_lower"] = round(t - half_width, 1)
-                pt["temperature_upper"] = round(t + half_width, 1)
-                pt["uncertainty_interval_width"] = round(half_width * 2.0, 1)
+        spread = await service.get_ensemble_temperature_spread(lat, lon, hours=min(hours, 360))
+        for pt in hourly:
+            lo_hi = spread.get(pt.get("time"))
+            if lo_hi:
+                pt["temperature_lower"], pt["temperature_upper"] = lo_hi
+                pt["uncertainty_interval_width"] = round(lo_hi[1] - lo_hi[0], 1)
             else:
-                pt["temperature_lower"] = None
-                pt["temperature_upper"] = None
-                pt["uncertainty_interval_width"] = None
+                pt["temperature_lower"] = pt["temperature_upper"] = pt["uncertainty_interval_width"] = None
 
         return {
             "status": "success",
             "data": data,
-            "uncertainty_metadata": {
-                "nominal_interval": "80% Prediction Interval [P10, P90]",
-                "raw_empirical_coverage_pct": 72.9,
-                "calibrated_conformal_coverage_pct": 82.1,
-                "conformal_adjustment_margin_c": 0.21,
-                "finite_sample_index": 3127,
-                "validation_test_hours": 3932,
-                "sub_hourly_interpolation_disclaimer": "Sub-hourly timelines are temporal spline interpolations, not Doppler radar convective cell tracking.",
-            }
-
+            "uncertainty_metadata": ENSEMBLE_SPREAD_METADATA,
         }
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Forecast fetch failed: {str(e)}")

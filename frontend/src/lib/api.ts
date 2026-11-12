@@ -173,9 +173,10 @@ export const api = {
             temp_p10: p.temperature_lower ?? p.temp_lower_80 ?? t,
             temp_p50: t,
             temp_p90: p.temperature_upper ?? p.temp_upper_80 ?? t,
-            precip_p10: 0,
+            // No precipitation spread is available; p10/p90 mirror the forecast value
+            precip_p10: precip,
             precip_p50: precip,
-            precip_p90: precip * 1.5,
+            precip_p90: precip,
             precip_probability: (p.precipitation_probability ?? 0) / 100,
             wind_speed_10m: p.wind_speed_10m ?? 0,
             relative_humidity_2m: p.relative_humidity_2m ?? 0,

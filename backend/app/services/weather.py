@@ -115,6 +115,44 @@ class WeatherService:
         self._cache[cache_key] = (now, result)
         return result
 
+    async def get_ensemble_temperature_spread(self, lat: float, lon: float, hours: int = 72) -> dict[str, tuple[float, float]]:
+        """
+        10th/90th percentile of 2 m temperature across the ECMWF IFS ensemble
+        (control + 50 members), keyed by local ISO hour. Empty dict on failure.
+        """
+        cache_key = f"ens:{round(lat, 3)}:{round(lon, 3)}:{hours}"
+        now = time.time()
+        if cache_key in self._cache:
+            c_time, c_data = self._cache[cache_key]
+            if now - c_time < 1800:
+                WeatherService._cache_hits_count += 1
+                return c_data
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "hourly": "temperature_2m",
+            "models": "ecmwf_ifs025",
+            "forecast_hours": hours,
+            "timezone": "auto",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                res = await client.get("https://ensemble-api.open-meteo.com/v1/ensemble", params=params)
+                res.raise_for_status()
+                hourly = res.json().get("hourly", {})
+            WeatherService._api_calls_count += 1
+        except Exception:
+            return {}
+        member_keys = [k for k in hourly if k.startswith("temperature_2m")]
+        spread: dict[str, tuple[float, float]] = {}
+        for i, t in enumerate(hourly.get("time", [])):
+            vals = [hourly[k][i] for k in member_keys if hourly[k][i] is not None]
+            if len(vals) >= 10:
+                p10, p90 = np.percentile(vals, [10, 90])
+                spread[t] = (round(float(p10), 1), round(float(p90), 1))
+        self._cache[cache_key] = (now, spread)
+        return spread
+
     async def get_hourly_forecast(self, lat: float, lon: float, hours: int = 48) -> dict:
         """
         Fetch hourly forecast data with 15-minute TTL caching.

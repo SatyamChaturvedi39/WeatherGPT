@@ -272,14 +272,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 <Tooltip
                   content={
                     <span>
-                      Median prediction (P50) with calibrated 80% likelihood envelope (P10 to P90),
-                      computed via isotonic quantile calibration.
+                      Line: Open-Meteo deterministic forecast. Shaded band: 10th to 90th percentile of the
+                      ECMWF ensemble (51 members). The band is raw ensemble spread, not calibrated against observations.
                     </span>
                   }
                 />
               </div>
               <p className="text-xs text-text-secondary mt-0.5">
-                Shaded area = 80% likely range
+                Shaded area = ensemble 10–90% spread
               </p>
             </div>
 
@@ -375,10 +375,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                         <div className="floating-layer rounded-btn p-2.5 text-xs shadow-floating">
                           <div className="font-semibold text-text-primary mb-1">{d.time}</div>
                           <div className="text-text-secondary">
-                            Median Forecast: <strong className="text-accent">{d.temp_p50}°</strong>
+                            Forecast: <strong className="text-accent">{d.temp_p50}°</strong>
                           </div>
                           <div className="text-text-muted text-2xs mt-0.5">
-                            80% range: {d.temp_p10}° to {d.temp_p90}°
+                            Ensemble 10–90%: {d.temp_p10}° to {d.temp_p90}°
                           </div>
                         </div>
                       );
@@ -400,14 +400,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     dataKey="temp_p90"
                     stroke="none"
                     fill="url(#tempBandFill)"
-                    name="P90 Upper"
+                    name="Ensemble P90"
                   />
                   <Area
                     type="monotone"
                     dataKey="temp_p10"
                     stroke="none"
                     fill="var(--color-bg-surface)"
-                    name="P10 Lower"
+                    name="Ensemble P10"
                   />
                   {/* Median P50 Line */}
                   <Line
@@ -416,7 +416,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     stroke="#2563eb"
                     strokeWidth={2}
                     dot={false}
-                    name="Median (P50)"
+                    name="Forecast"
                   />
                 </ComposedChart>
               </ResponsiveContainer>
