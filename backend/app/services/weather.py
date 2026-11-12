@@ -210,6 +210,7 @@ class WeatherService:
                 "latitude": data.get("latitude"),
                 "longitude": data.get("longitude"),
                 "timezone": data.get("timezone"),
+                "utc_offset_seconds": data.get("utc_offset_seconds"),
             },
             "hourly": time_points,
             "units": units,
@@ -986,11 +987,12 @@ class WeatherService:
                     "latitude": w_lat,
                     "longitude": w_lon,
                     "distance_km": dist_from_start,
-                    "temperature": 24.0,
-                    "precipitation": 0.0,
-                    "wind_speed": 10.0,
-                    "weather_code": 0,
-                    "hazard": None,
+                    # Conditions unavailable for this waypoint; never substitute made-up values
+                    "temperature": None,
+                    "precipitation": None,
+                    "wind_speed": None,
+                    "weather_code": None,
+                    "hazard": "Data unavailable",
                 })
 
         # Rain adjustment factor on traffic speed

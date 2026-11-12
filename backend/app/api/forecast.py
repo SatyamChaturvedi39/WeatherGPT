@@ -5,16 +5,19 @@ Provides current weather conditions, calibrated probabilistic forecasts,
 real TreeSHAP explainability, and empirical machine learning benchmark reports.
 """
 
+import asyncio
 import json
+import math
 import os
 import time
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
 from fastapi import APIRouter, Query, HTTPException
 import numpy as np
 
 from app.services.weather import WeatherService
 from app.services.verification import record_forecast
+from app.services import departure
 
 router = APIRouter()
 
@@ -757,3 +760,63 @@ async def get_model_benchmarks():
         detail="Benchmark results not found or unreadable. Run 'python ml/train.py' to regenerate ml/artifacts/benchmark_results.json.",
     )
 
+
+
+@router.get("/route/departures")
+async def get_route_departures(
+    origin: str = Query(..., description="Origin location name"),
+    destination: str = Query(..., description="Destination location name"),
+    transit_mode: Literal["two_wheeler", "auto_cab", "pedestrian", "four_wheeler"] = Query("two_wheeler"),
+    window_hours: int = Query(6, ge=1, le=12, description="How far ahead to consider leaving"),
+):
+    """
+    Best time to leave: for departures every 15 minutes over the next
+    `window_hours`, estimate the rain you would meet at each point of the route
+    when you actually reach it (hourly NWP forecast, linearly interpolated),
+    and recommend the driest departure.
+    """
+    service = WeatherService()
+    o = await service.geocode(origin, count=1)
+    d = await service.geocode(destination, count=1)
+    if not o:
+        raise HTTPException(status_code=404, detail=f"Could not locate origin: {origin}")
+    if not d:
+        raise HTTPException(status_code=404, detail=f"Could not locate destination: {destination}")
+    o, d = o[0], d[0]
+
+    distance = departure.haversine_km(o["latitude"], o["longitude"], d["latitude"], d["longitude"])
+    trip_min = departure.travel_minutes(distance, transit_mode)
+    hours_needed = window_hours + math.ceil(trip_min / 60) + 2
+    n_points = 5
+    coords = [
+        (o["latitude"] + f * (d["latitude"] - o["latitude"]), o["longitude"] + f * (d["longitude"] - o["longitude"]))
+        for f in (i / (n_points - 1) for i in range(n_points))
+    ]
+    try:
+        forecasts = await asyncio.gather(*(service.get_hourly_forecast(round(lat, 3), round(lon, 3), hours=hours_needed) for lat, lon in coords))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Rain forecast fetch failed: {e}")
+
+    now_ts = time.time()
+    slots = departure.plan_departures([departure.hourly_series(f) for f in forecasts], now_ts, trip_min, window_hours)
+    if not slots:
+        raise HTTPException(status_code=502, detail="Forecast did not cover the departure window")
+    best = departure.best_slot(slots)
+    first = slots[0]
+    return {
+        "status": "success",
+        "data": {
+            "origin": f"{o['name']}, {o.get('country', '')}".strip(", "),
+            "destination": f"{d['name']}, {d.get('country', '')}".strip(", "),
+            "transit_mode": transit_mode,
+            "distance_km": round(distance, 1),
+            "trip_minutes": round(trip_min),
+            "timezone": (forecasts[0].get("location") or {}).get("timezone"),
+            "utc_offset_seconds": (forecasts[0].get("location") or {}).get("utc_offset_seconds"),
+            "slots": slots,
+            "best": best,
+            "leave_now": first,
+            "method": "Hourly Open-Meteo precipitation and rain probability at 5 points along the straight-line route, "
+                      "interpolated to when each point is reached; travel time is the dry-road estimate.",
+        },
+    }
