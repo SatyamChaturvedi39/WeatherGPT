@@ -544,7 +544,7 @@ async def get_ml_prediction(
         conformal_lower = round(q10_pred - cal["margin_c"], 2)
         conformal_upper = round(q90_pred + cal["margin_c"], 2)
 
-        await record_forecast(lat, lon, predicted_point, current_temp)
+        await record_forecast(lat, lon, predicted_point, current_temp, rain_probability=rain_prob)
 
         return {
             "status": "success",

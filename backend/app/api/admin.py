@@ -77,6 +77,11 @@ async def get_forecast_verification(days: int = 30):
         "truth_source": "Open-Meteo hourly analysis (temperature_2m), not an independent station observation",
         **store.stats(days=max(1, min(days, 365))),
         "recent": store.recent_pairs(limit=72),
+        "rain": {
+            "event": "precipitation >= 0.1 mm in the target hour",
+            "score": "Brier score (lower is better; 0 = perfect)",
+            **store.stats(days=max(1, min(days, 365)), variable="rain"),
+        },
     }
 
 
