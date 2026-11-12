@@ -115,6 +115,45 @@ class WeatherService:
         self._cache[cache_key] = (now, result)
         return result
 
+    async def get_nwp_temperature_bias(self, lat: float, lon: float, days: int) -> float | None:
+        """
+        Mean error of Open-Meteo's day-ahead temperature forecast over the last
+        `days` days of elapsed hours: mean(previous_day1 forecast - analysis).
+        Used to bias-correct the T+24h NWP input. None if too few pairs.
+        """
+        cache_key = f"nwpbias:{round(lat, 2)}:{round(lon, 2)}:{days}"
+        now = time.time()
+        if cache_key in self._cache:
+            c_time, c_data = self._cache[cache_key]
+            if now - c_time < 3600:
+                WeatherService._cache_hits_count += 1
+                return c_data
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "hourly": "temperature_2m,temperature_2m_previous_day1",
+            "past_days": days + 1,
+            "forecast_days": 1,
+            "timezone": "UTC",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                res = await client.get("https://previous-runs-api.open-meteo.com/v1/forecast", params=params)
+                res.raise_for_status()
+                hourly = res.json().get("hourly", {})
+            WeatherService._api_calls_count += 1
+        except Exception:
+            return None
+        errors = []
+        for t, actual, prev in zip(hourly.get("time", []), hourly.get("temperature_2m", []),
+                                   hourly.get("temperature_2m_previous_day1", [])):
+            ts = datetime.fromisoformat(t).replace(tzinfo=timezone.utc).timestamp()
+            if actual is not None and prev is not None and now - days * 86400 < ts <= now:
+                errors.append(prev - actual)
+        bias = round(sum(errors) / len(errors), 3) if len(errors) >= 24 else None
+        self._cache[cache_key] = (now, bias)
+        return bias
+
     async def get_ensemble_temperature_spread(self, lat: float, lon: float, hours: int = 72) -> dict[str, tuple[float, float]]:
         """
         10th/90th percentile of 2 m temperature across the ECMWF IFS ensemble

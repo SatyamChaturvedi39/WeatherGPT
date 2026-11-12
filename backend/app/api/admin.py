@@ -54,6 +54,16 @@ def _benchmark_rows() -> list[dict]:
     return out
 
 
+def _nwp_benchmark() -> dict | None:
+    """Held-out result of the NWP-corrected T+24h model, if it was trained."""
+    try:
+        with open(os.path.join(ARTIFACTS_DIR, "benchmark_results.json"), encoding="utf-8") as f:
+            rows = json.load(f).get("temperature_forecasting_benchmark", [])
+        return next((r.get("nwp_corrected_model") for r in rows if r.get("horizon") == "T+24h"), None)
+    except Exception:
+        return None
+
+
 def _count_rows(db_path: str, table: str, store_cls) -> int | None:
     try:
         store = store_cls(db_path)
@@ -98,11 +108,12 @@ async def get_system_metrics():
     loaded = "point" in models
     trained_at = _artifact_time("xgboost_t24_point.json")
     bench = _benchmark_rows()
+    nwp_bench = _nwp_benchmark()
     mae_24h = next((b["mae"] for b in bench if b["horizon_hours"] == 24), None)
 
     model_cards = [
         {
-            "name": "XGBoost T+24h Point Regressor",
+            "name": "XGBoost T+24h station blend (fallback without NWP)",
             "trained_at": trained_at,
             "task": "24h temperature forecast",
             "status": "loaded" if loaded else "not_loaded",
@@ -110,6 +121,19 @@ async def get_system_metrics():
             **({"mae_temperature": f"{mae_24h} °C"} if mae_24h is not None else {}),
             "horizons": bench,
         },
+        *([{
+            "name": "XGBoost T+24h + bias-corrected Open-Meteo forecast",
+            "trained_at": _artifact_time("xgboost_t24_nwp.json"),
+            "task": "24h temperature forecast (live model when the NWP forecast is available)",
+            "status": "loaded" if models.get("nwp_model") is not None else "not_loaded",
+            "mae_temperature": f"{nwp_bench['test_mae']} °C",
+            "horizons": [{
+                "horizon_hours": 24,
+                "mae": nwp_bench["test_mae"],
+                "rmse": nwp_bench["test_rmse"],
+                "gain_vs_persistence_pct": nwp_bench["gain_vs_persistence_pct"],
+            }],
+        }] if nwp_bench else []),
         {
             "name": "XGBoost Quantile Regressors (P10/P50/P90)",
             "trained_at": _artifact_time("xgboost_q50.json"),

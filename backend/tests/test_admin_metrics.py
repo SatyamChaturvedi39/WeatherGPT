@@ -24,6 +24,7 @@ def test_reports_unloaded_models_and_db_down(monkeypatch):
 
 def test_benchmark_horizons_come_from_artifact(monkeypatch):
     monkeypatch.setattr(admin, "_benchmark_rows", lambda: [{"horizon_hours": 24, "mae": 1.23, "rmse": 1.5, "gain_vs_persistence_pct": 12.0}])
+    monkeypatch.setattr(admin, "_nwp_benchmark", lambda: None)
     data = TestClient(app).get("/api/admin/metrics").json()["services"]
     point = data["ml_inference_engine"]["models"][0]
     assert point["mae_temperature"] == "1.23 °C"

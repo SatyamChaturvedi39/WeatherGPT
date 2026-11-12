@@ -26,6 +26,9 @@ import shap
 
 
 DATA_PATH = "data/bengaluru_hourly_2021_2023.csv" if os.path.exists("data/bengaluru_hourly_2021_2023.csv") else "data/bengaluru_hourly_2021_2024.csv"
+NWP_DATA_PATH = "data/bengaluru_nwp_previous_day1_2021_2023.csv"
+# Candidate windows (days) for the rolling NWP bias correction; chosen on validation
+NWP_BIAS_WINDOWS_D = (7, 14)
 ARTIFACTS_DIR = "ml/artifacts"
 
 
@@ -246,6 +249,69 @@ def run_benchmark():
           f"vs raw XGB {row24['xgboost_raw_mae']:.2f}°C vs persistence {row24['persistence_mae']:.2f}°C")
 
     # ─────────────────────────────────────────────────────────────
+    # 1c. T+24h MODEL USING THE BIAS-CORRECTED DAY-AHEAD NWP FORECAST
+    # ─────────────────────────────────────────────────────────────
+    # Input: Open-Meteo's day-ahead forecast for t+24 (Previous Runs API,
+    # "previous_day1"), corrected by the mean NWP error over the last W days
+    # of target hours that had already happened at issue time t (no lookahead).
+    # The NWP error drifts between years, so a fixed bias learned on the
+    # training years does not transfer; a rolling correction does.
+    # XGBoost then learns the residual y_{t+24} - nwp_corr, and the result is
+    # blended with persistence. W and the blend weight are chosen on validation.
+    nwp_result = None
+    if os.path.exists(NWP_DATA_PATH):
+        nwp = pd.read_csv(NWP_DATA_PATH, parse_dates=["time"]).set_index("time")["nwp_temperature_2m"]
+        actual_by_time = df.set_index("time")["temperature_2m"]
+        nwp_err = (pd.Series(actual_by_time.index, index=actual_by_time.index).map(nwp) - actual_by_time)
+        nwp_t24 = (df["time"] + pd.Timedelta(hours=24)).map(nwp)
+        nwp_kw = dict(n_estimators=300, max_depth=4, learning_rate=0.05, subsample=0.9, colsample_bytree=0.8,
+                      random_state=42, n_jobs=-1)
+        candidates = []
+        for window_d in NWP_BIAS_WINDOWS_D:
+            bias = nwp_err.rolling(f"{window_d}D", min_periods=24).mean()
+            corr = (nwp_t24 - df["time"].map(bias)).values
+            corr_tr, corr_va, corr_te = corr[: train_end - embargo_h], corr[train_end: val_end - embargo_h], corr[val_end:]
+            ok_tr, ok_va, ok_te = ~np.isnan(corr_tr), ~np.isnan(corr_va), ~np.isnan(corr_te)
+            Xtr_n = np.column_stack([X_train, corr_tr])[ok_tr]
+            Xva_n = np.column_stack([X_val, corr_va])[ok_va]
+            Xte_n = np.column_stack([X_test, corr_te])[ok_te]
+            m_n = xgb.XGBRegressor(**nwp_kw).fit(Xtr_n, train_df["target_t24"].values[ok_tr] - corr_tr[ok_tr])
+            pv = m_n.predict(Xva_n) + corr_va[ok_va]
+            pt = m_n.predict(Xte_n) + corr_te[ok_te]
+            yv, yt = val_df["target_t24"].values[ok_va], test_df["target_t24"].values[ok_te]
+            cv, ct = val_df["temperature_2m"].values[ok_va], test_df["temperature_2m"].values[ok_te]
+            maes = [mean_absolute_error(yv, w * pv + (1 - w) * cv) for w in blend_grid]
+            w_n = float(blend_grid[int(np.argmin(maes))])
+            candidates.append({
+                "window_d": window_d, "model": m_n, "w": w_n, "val_mae": float(min(maes)),
+                "test_mae": float(mean_absolute_error(yt, w_n * pt + (1 - w_n) * ct)),
+                "test_rmse": float(np.sqrt(mean_squared_error(yt, w_n * pt + (1 - w_n) * ct))),
+                "test_pers_mae": float(mean_absolute_error(yt, ct)),
+                "test_raw_nwp_mae": float(mean_absolute_error(yt, nwp_t24.values[val_end:][ok_te])),
+                "test_rows": int(ok_te.sum()),
+            })
+            print(f"  NWP model (bias window {window_d}d): w={w_n:.2f} val MAE {min(maes):.3f} -> test MAE "
+                  f"{candidates[-1]['test_mae']:.3f}°C (persistence on same rows {candidates[-1]['test_pers_mae']:.3f})")
+        nwp_result = min(candidates, key=lambda c: c["val_mae"])
+        nwp_gain = (nwp_result["test_pers_mae"] - nwp_result["test_mae"]) / nwp_result["test_pers_mae"] * 100
+        row24["nwp_corrected_model"] = {
+            "bias_window_days": nwp_result["window_d"],
+            "persistence_blend_weight": nwp_result["w"],
+            "validation_mae": round(nwp_result["val_mae"], 3),
+            "test_mae": round(nwp_result["test_mae"], 3),
+            "test_rmse": round(nwp_result["test_rmse"], 3),
+            "test_persistence_mae_same_rows": round(nwp_result["test_pers_mae"], 3),
+            "test_raw_nwp_mae_same_rows": round(nwp_result["test_raw_nwp_mae"], 3),
+            "gain_vs_persistence_pct": round(nwp_gain, 1),
+            "test_rows_with_nwp": nwp_result["test_rows"],
+            "nwp_source": "Open-Meteo Previous Runs API (temperature_2m_previous_day1)",
+        }
+        print(f"  Selected NWP model: {nwp_result['window_d']}d bias window -> test MAE {nwp_result['test_mae']:.3f}°C "
+              f"({nwp_gain:+.1f}% vs persistence)")
+    else:
+        print(f"  Skipping NWP-corrected model: {NWP_DATA_PATH} not found (run ml/fetch_data.py)")
+
+    # ─────────────────────────────────────────────────────────────
     # 2. QUANTILE REGRESSION & SPLIT CONFORMAL CALIBRATION (T+24h)
     # ─────────────────────────────────────────────────────────────
     print("\nTraining XGBoost Quantile Regressors (tau=0.10, 0.25, 0.50, 0.75, 0.90)...")
@@ -448,6 +514,17 @@ def run_benchmark():
     with open(os.path.join(ARTIFACTS_DIR, "feature_names.json"), "w") as f:
         json.dump(feature_cols, f, indent=2)
     np.save(os.path.join(ARTIFACTS_DIR, "shap_background.npy"), shap_background)
+    if nwp_result is not None:
+        nwp_result["model"].save_model(os.path.join(ARTIFACTS_DIR, "xgboost_t24_nwp.json"))
+        with open(os.path.join(ARTIFACTS_DIR, "t24_nwp.json"), "w") as f:
+            json.dump({
+                "bias_window_days": nwp_result["window_d"],
+                "persistence_blend_weight": nwp_result["w"],
+                "features": feature_cols + ["nwp_t24_bias_corrected"],
+                "target": "temperature_2m(t+24) - nwp_t24_bias_corrected",
+                "formula": "y_hat = w * (xgboost_t24_nwp(x, nwp_corr) + nwp_corr) + (1 - w) * temperature_2m(t)",
+                "nwp_corr": "Open-Meteo forecast for t+24 minus its mean error over the last bias_window_days of elapsed hours",
+            }, f, indent=2)
     with open(os.path.join(ARTIFACTS_DIR, "t24_blend.json"), "w") as f:
         json.dump({
             "persistence_blend_weight": blend_w,
@@ -467,7 +544,11 @@ def run_benchmark():
         {"filename": "xgboost_precipitation_t24.json", "target": "rain >= 0.1mm (T+24h)", "type": "XGBClassifier", "status": "Serialized Precipitation Classifier"},
         {"filename": "feature_names.json", "target": "34 Input Features Schema", "type": "JSON Metadata", "status": "Active Live Inference Alignment"},
         {"filename": "shap_background.npy", "target": "TreeSHAP Background Samples (N=100)", "type": "NumPy Array", "status": "Explainability Reference Data"},
-        {"filename": "t24_blend.json", "target": "T+24h persistence blend weight", "type": "JSON Metadata", "status": "Active Live Inference"},
+        {"filename": "t24_blend.json", "target": "T+24h persistence blend weight", "type": "JSON Metadata", "status": "Fallback Live Inference (no NWP)"},
+        *([
+            {"filename": "xgboost_t24_nwp.json", "target": "temperature_2m (T+24h) residual over bias-corrected NWP", "type": "XGBRegressor", "status": "Active Live Inference (with NWP)"},
+            {"filename": "t24_nwp.json", "target": "NWP model config (bias window, blend weight, features)", "type": "JSON Metadata", "status": "Active Live Inference (with NWP)"},
+        ] if nwp_result is not None else []),
         {"filename": "benchmark_results.json", "target": "Evaluation Metrics & Manifest", "type": "JSON Report", "status": "Active API Telemetry Source"},
     ]
 
@@ -551,6 +632,14 @@ def run_benchmark():
                 f"At T+1h and T+6h XGBoost alone gives "
                 f"{horizon_results[0]['xgboost_gain_vs_persistence_pct']:+.1f}% and "
                 f"{horizon_results[1]['xgboost_gain_vs_persistence_pct']:+.1f}% vs persistence."
+                + (
+                    f" With Open-Meteo's day-ahead forecast as an input (bias-corrected over the last "
+                    f"{row24['nwp_corrected_model']['bias_window_days']} days and blended with persistence), T+24h test MAE is "
+                    f"{row24['nwp_corrected_model']['test_mae']:.2f}°C "
+                    f"({row24['nwp_corrected_model']['gain_vs_persistence_pct']:+.1f}% vs persistence on the same hours); "
+                    f"this is the live model whenever the forecast is available."
+                    if "nwp_corrected_model" in row24 else ""
+                )
             ),
             "host_runtime_limitation": "PyTorch LSTM benchmark was excluded due to host Windows runtime DLL dependency conflict (torch.c10.dll WinError 1114). Documented honestly in thesis defense report.",
         }

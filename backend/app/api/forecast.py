@@ -59,6 +59,53 @@ def blended_t24_point(models: dict, x, current_temp: float) -> tuple[float, floa
     return w * raw + (1.0 - w) * current_temp, raw
 
 
+async def live_nwp_input(service: WeatherService, models: dict, lat: float, lon: float) -> dict | None:
+    """Bias-corrected Open-Meteo forecast for T+24h, or None if any piece is unavailable."""
+    cfg = models.get("nwp_config")
+    if models.get("nwp_model") is None or not cfg:
+        return None
+    try:
+        hourly = (await service.get_hourly_forecast(lat, lon, hours=25)).get("hourly", [])
+        raw = hourly[24].get("temperature_2m") if len(hourly) > 24 else None
+    except Exception:
+        raw = None
+    bias = await service.get_nwp_temperature_bias(lat, lon, cfg["bias_window_days"])
+    if raw is None or bias is None:
+        return None
+    return {"raw_c": float(raw), "bias_c": float(bias), "corrected_c": float(raw) - float(bias)}
+
+
+def t24_point_forecast(models: dict, x, current_temp: float, nwp: dict | None) -> dict:
+    """
+    Published T+24h point forecast. Uses the NWP-corrected model when the
+    bias-corrected Open-Meteo forecast is available, else the station-only
+    XGBoost/persistence blend.
+    """
+    if nwp is not None and models.get("nwp_model") is not None:
+        cfg = models["nwp_config"]
+        xn = np.column_stack([x, [[nwp["corrected_c"]]]])
+        model_c = float(models["nwp_model"].predict(xn)[0]) + nwp["corrected_c"]
+        w = float(cfg["persistence_blend_weight"])
+        return {
+            "value": w * model_c + (1 - w) * current_temp,
+            "method": "nwp_corrected",
+            "formula": "w * (XGBoost residual + bias-corrected Open-Meteo forecast) + (1 - w) * current temperature",
+            "persistence_blend_weight": w,
+            "model_component_c": round(model_c, 2),
+            "nwp_forecast_c": round(nwp["raw_c"], 2),
+            "nwp_recent_bias_c": round(nwp["bias_c"], 2),
+            "nwp_bias_window_days": cfg["bias_window_days"],
+        }
+    blended, raw = blended_t24_point(models, x, current_temp)
+    return {
+        "value": blended,
+        "method": "station_blend",
+        "formula": "w * XGBoost + (1 - w) * current temperature",
+        "persistence_blend_weight": models.get("blend_weight", 1.0),
+        "model_component_c": round(raw, 2),
+    }
+
+
 def get_all_ml_models():
     """Load all trained XGBoost models, quantile regressors, precipitation classifier, and TreeSHAP explainer lazily."""
     global _cached_models_dict
@@ -98,6 +145,15 @@ def get_all_ml_models():
 
             explainer = shap.TreeExplainer(model_point)
 
+            nwp_model, nwp_cfg = None, None
+            nwp_model_path = os.path.join(ARTIFACTS_DIR, "xgboost_t24_nwp.json")
+            nwp_cfg_path = os.path.join(ARTIFACTS_DIR, "t24_nwp.json")
+            if os.path.exists(nwp_model_path) and os.path.exists(nwp_cfg_path):
+                nwp_model = xgb.XGBRegressor()
+                nwp_model.load_model(nwp_model_path)
+                with open(nwp_cfg_path, "r") as f:
+                    nwp_cfg = json.load(f)
+
             blend_path = os.path.join(ARTIFACTS_DIR, "t24_blend.json")
             blend_w = 1.0
             if os.path.exists(blend_path):
@@ -105,6 +161,8 @@ def get_all_ml_models():
                     blend_w = float(json.load(f)["persistence_blend_weight"])
 
             _cached_models_dict = {
+                "nwp_model": nwp_model,
+                "nwp_config": nwp_cfg,
                 "blend_weight": blend_w,
                 "calibration": _load_calibration(),
                 "point": model_point,
@@ -418,7 +476,11 @@ async def explain_forecast(
             explanation = explainer(x)
             shap_values = explanation.values[0]
             base_value = float(explanation.base_values[0])
-            predicted_temp, raw_xgb_temp = blended_t24_point(models, x, float(feat_map["temperature_2m"]))
+            point = t24_point_forecast(
+                models, x, float(feat_map["temperature_2m"]), await live_nwp_input(service, models, lat, lon)
+            )
+            predicted_temp = point["value"]
+            raw_xgb_temp = float(model.predict(x)[0])
             cal = models["calibration"]
 
             # Also compute quantiles and rain probability from serialized artifacts
@@ -473,7 +535,13 @@ async def explain_forecast(
                 "predicted_value": round(predicted_temp, 2),
                 "xgboost_component_value": round(raw_xgb_temp, 2),
                 "persistence_blend_weight": models["blend_weight"],
-                "attribution_note": "SHAP values explain the XGBoost component; the published T+24h value blends it with current temperature (persistence).",
+                "point_forecast_method": point["method"],
+                "attribution_note": (
+                    "SHAP values explain the station-history XGBoost model (its output is xgboost_component_value). "
+                    + ("The published T+24h value instead uses the bias-corrected Open-Meteo forecast model blended with persistence."
+                       if point["method"] == "nwp_corrected" else
+                       "The published T+24h value blends it with current temperature (persistence).")
+                ),
                 "units": "°C",
                 "features": top_features,
                 "confidence_level": "80% Calibrated Prediction Interval",
@@ -537,7 +605,8 @@ async def get_ml_prediction(
         )
 
         current_temp = float(feat_map["temperature_2m"])
-        predicted_point, raw_xgb_point = blended_t24_point(models, x, current_temp)
+        point = t24_point_forecast(models, x, current_temp, await live_nwp_input(service, models, lat, lon))
+        predicted_point = point.pop("value")
         cal = models["calibration"]
         q10_pred = float(models["q10"].predict(x)[0])
         q50_pred = float(models["q50"].predict(x)[0])
@@ -555,12 +624,7 @@ async def get_ml_prediction(
             "forecast_horizon": "T+24h",
             "forecast_origin_utc": now_utc.isoformat(),
             "point_temperature_c": round(predicted_point, 2),
-            "point_forecast_method": {
-                "formula": "w * XGBoost + (1 - w) * current temperature",
-                "persistence_blend_weight": models["blend_weight"],
-                "xgboost_component_c": round(raw_xgb_point, 2),
-                "current_temperature_c": round(current_temp, 2),
-            },
+            "point_forecast_method": {**point, "current_temperature_c": round(current_temp, 2)},
             "quantile_forecast_c": {
                 "p10": round(q10_pred, 2),
                 "p50_median": round(q50_pred, 2),

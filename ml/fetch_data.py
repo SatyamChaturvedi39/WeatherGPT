@@ -75,5 +75,52 @@ def fetch_bengaluru_historical_data(
     return df
 
 
+OPEN_METEO_PREVIOUS_RUNS_URL = "https://previous-runs-api.open-meteo.com/v1/forecast"
+
+
+def fetch_day_ahead_nwp(
+    start_date: str = "2021-01-01",
+    end_date: str = "2023-12-31",
+    lat: float = 12.9716,
+    lon: float = 77.5946,
+    output_path: str = "data/bengaluru_nwp_previous_day1_2021_2023.csv",
+) -> pd.DataFrame:
+    """
+    Fetch archived day-ahead NWP forecasts from the Open-Meteo Previous Runs API.
+
+    ``temperature_2m_previous_day1`` at hour T is the value forecast for T by the
+    model run issued one day earlier - the kind of forecast that is available
+    24 hours ahead at inference time. Hours without an archived run are NaN.
+    """
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    if os.path.exists(output_path):
+        print(f"Day-ahead NWP dataset already exists at {output_path}. Loading existing file...")
+        return pd.read_csv(output_path, parse_dates=["time"])
+
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "start_date": start_date,
+        "end_date": end_date,
+        "hourly": "temperature_2m_previous_day1,precipitation_probability_previous_day1",
+        "timezone": "UTC",
+    }
+    print(f"Querying Open-Meteo Previous Runs API for day-ahead forecasts from {start_date} to {end_date}...")
+    with httpx.Client(timeout=120.0) as client:
+        response = client.get(OPEN_METEO_PREVIOUS_RUNS_URL, params=params)
+        response.raise_for_status()
+        hourly = response.json().get("hourly", {})
+
+    df = pd.DataFrame({
+        "time": pd.to_datetime(hourly["time"]),
+        "nwp_temperature_2m": hourly["temperature_2m_previous_day1"],
+        "nwp_precipitation_probability": hourly.get("precipitation_probability_previous_day1"),
+    }).sort_values("time").reset_index(drop=True)
+    df.to_csv(output_path, index=False)
+    print(f"Saved {len(df)} hours ({df['nwp_temperature_2m'].notna().sum()} with a day-ahead forecast) to {output_path}.")
+    return df
+
+
 if __name__ == "__main__":
     fetch_bengaluru_historical_data()
+    fetch_day_ahead_nwp()

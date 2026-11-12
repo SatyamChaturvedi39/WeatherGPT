@@ -53,7 +53,19 @@
       "xgboost_gain_vs_climatology_pct": 52.0,
       "xgboost_raw_mae": 0.82,
       "xgboost_raw_rmse": 1.07,
-      "persistence_blend_weight": 0.55
+      "persistence_blend_weight": 0.55,
+      "nwp_corrected_model": {
+        "bias_window_days": 14,
+        "persistence_blend_weight": 0.65,
+        "validation_mae": 0.774,
+        "test_mae": 0.7,
+        "test_rmse": 0.938,
+        "test_persistence_mae_same_rows": 0.753,
+        "test_raw_nwp_mae_same_rows": 1.075,
+        "gain_vs_persistence_pct": 7.0,
+        "test_rows_with_nwp": 3884,
+        "nwp_source": "Open-Meteo Previous Runs API (temperature_2m_previous_day1)"
+      }
     }
   ],
   "precipitation_classification_benchmark": {
@@ -296,7 +308,19 @@
       "filename": "t24_blend.json",
       "target": "T+24h persistence blend weight",
       "type": "JSON Metadata",
-      "status": "Active Live Inference"
+      "status": "Fallback Live Inference (no NWP)"
+    },
+    {
+      "filename": "xgboost_t24_nwp.json",
+      "target": "temperature_2m (T+24h) residual over bias-corrected NWP",
+      "type": "XGBRegressor",
+      "status": "Active Live Inference (with NWP)"
+    },
+    {
+      "filename": "t24_nwp.json",
+      "target": "NWP model config (bias window, blend weight, features)",
+      "type": "JSON Metadata",
+      "status": "Active Live Inference (with NWP)"
     },
     {
       "filename": "benchmark_results.json",
@@ -306,7 +330,7 @@
     }
   ],
   "scientific_notes": {
-    "diurnal_persistence_barrier": "At T+24h, diurnal persistence (y_{t+24} ~ y_t) achieves an MAE of 0.75\u00b0C due to strong daily periodicity; raw XGBoost reaches 0.82\u00b0C, so the live T+24h forecast blends it with persistence (w=0.55, chosen on validation), giving 0.74\u00b0C (+0.8% vs persistence). At T+1h and T+6h XGBoost alone gives +56.3% and +80.2% vs persistence.",
+    "diurnal_persistence_barrier": "At T+24h, diurnal persistence (y_{t+24} ~ y_t) achieves an MAE of 0.75\u00b0C due to strong daily periodicity; raw XGBoost reaches 0.82\u00b0C, so the live T+24h forecast blends it with persistence (w=0.55, chosen on validation), giving 0.74\u00b0C (+0.8% vs persistence). At T+1h and T+6h XGBoost alone gives +56.3% and +80.2% vs persistence. With Open-Meteo's day-ahead forecast as an input (bias-corrected over the last 14 days and blended with persistence), T+24h test MAE is 0.70\u00b0C (+7.0% vs persistence on the same hours); this is the live model whenever the forecast is available.",
     "host_runtime_limitation": "PyTorch LSTM benchmark was excluded due to host Windows runtime DLL dependency conflict (torch.c10.dll WinError 1114). Documented honestly in thesis defense report."
   }
 }

@@ -482,7 +482,8 @@ class TestScientificValidation:
 
         manifest = bm["artifact_manifest"]
         model_artifacts = [item for item in manifest if item["type"].startswith("XGB")]
-        assert len(model_artifacts) == 9
+        has_nwp_model = any(item["filename"] == "xgboost_t24_nwp.json" for item in manifest)
+        assert len(model_artifacts) == 9 + int(has_nwp_model)
         assert (art_dir / "t24_blend.json").exists()
 
         for item in model_artifacts:
