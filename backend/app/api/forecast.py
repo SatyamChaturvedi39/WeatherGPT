@@ -27,6 +27,27 @@ _cached_explain: dict[str, tuple[float, dict]] = {}
 _cached_ml_pred: dict[str, tuple[float, dict]] = {}
 
 
+def _load_calibration() -> dict:
+    """Interval calibration numbers recorded by ml/train.py (single source of truth)."""
+    with open(os.path.join(ARTIFACTS_DIR, "benchmark_results.json"), "r", encoding="utf-8") as f:
+        uq = json.load(f)["uncertainty_quantification"]
+    raw, conf = uq["raw_quantile_regression"], uq["split_conformal_calibration"]
+    return {
+        "margin_c": conf["conformal_adjustment_margin_c"],
+        "calibrated_coverage_pct": conf["calibrated_coverage_pct"],
+        "raw_coverage_pct": raw["empirical_coverage_pct"],
+        "quantile_index": conf["finite_sample_quantile_index"],
+        "validation_size": conf["validation_sample_size"],
+    }
+
+
+def blended_t24_point(models: dict, x, current_temp: float) -> tuple[float, float]:
+    """T+24h point forecast: w * XGBoost + (1 - w) * current temperature. Returns (blended, raw_xgb)."""
+    raw = float(models["point"].predict(x)[0])
+    w = models.get("blend_weight", 1.0)
+    return w * raw + (1.0 - w) * current_temp, raw
+
+
 def get_all_ml_models():
     """Load all trained XGBoost models, quantile regressors, precipitation classifier, and TreeSHAP explainer lazily."""
     global _cached_models_dict
@@ -66,7 +87,15 @@ def get_all_ml_models():
 
             explainer = shap.TreeExplainer(model_point)
 
+            blend_path = os.path.join(ARTIFACTS_DIR, "t24_blend.json")
+            blend_w = 1.0
+            if os.path.exists(blend_path):
+                with open(blend_path, "r") as f:
+                    blend_w = float(json.load(f)["persistence_blend_weight"])
+
             _cached_models_dict = {
+                "blend_weight": blend_w,
+                "calibration": _load_calibration(),
                 "point": model_point,
                 "q10": model_q10,
                 "q50": model_q50,
@@ -399,15 +428,16 @@ async def explain_forecast(
             explanation = explainer(x)
             shap_values = explanation.values[0]
             base_value = float(explanation.base_values[0])
-            predicted_temp = float(model.predict(x)[0])
+            predicted_temp, raw_xgb_temp = blended_t24_point(models, x, float(feat_map["temperature_2m"]))
+            cal = models["calibration"]
 
             # Also compute quantiles and rain probability from serialized artifacts
             q10_val = float(models["q10"].predict(x)[0])
             q50_val = float(models["q50"].predict(x)[0])
             q90_val = float(models["q90"].predict(x)[0])
             rain_prob = float(models["precip"].predict_proba(x)[0][1])
-            conformal_lower = round(q10_val - 0.21, 2)
-            conformal_upper = round(q90_val + 0.21, 2)
+            conformal_lower = round(q10_val - cal["margin_c"], 2)
+            conformal_upper = round(q90_val + cal["margin_c"], 2)
 
             # Human-readable feature descriptions
             meta_descriptions = {
@@ -451,13 +481,16 @@ async def explain_forecast(
                 "model": "Trained XGBoost Regressor (T+24h) + TreeSHAP",
                 "base_value": round(base_value, 2),
                 "predicted_value": round(predicted_temp, 2),
+                "xgboost_component_value": round(raw_xgb_temp, 2),
+                "persistence_blend_weight": models["blend_weight"],
+                "attribution_note": "SHAP values explain the XGBoost component; the published T+24h value blends it with current temperature (persistence).",
                 "units": "°C",
                 "features": top_features,
                 "confidence_level": "80% Calibrated Prediction Interval",
                 "split_conformal_interval_80": {
                     "nominal_coverage_pct": 80.0,
-                    "calibrated_empirical_coverage_pct": 82.1,
-                    "conformal_adjustment_margin_c": 0.21,
+                    "calibrated_empirical_coverage_pct": cal["calibrated_coverage_pct"],
+                    "conformal_adjustment_margin_c": cal["margin_c"],
                     "lower_bound_c": conformal_lower,
                     "upper_bound_c": conformal_upper,
                     "raw_p10_c": round(q10_val, 2),
@@ -513,14 +546,16 @@ async def get_ml_prediction(
             feature_names, curr, recent_history, now_utc
         )
 
-        predicted_point = float(models["point"].predict(x)[0])
+        current_temp = float(feat_map["temperature_2m"])
+        predicted_point, raw_xgb_point = blended_t24_point(models, x, current_temp)
+        cal = models["calibration"]
         q10_pred = float(models["q10"].predict(x)[0])
         q50_pred = float(models["q50"].predict(x)[0])
         q90_pred = float(models["q90"].predict(x)[0])
         rain_prob = float(models["precip"].predict_proba(x)[0][1])
 
-        conformal_lower = round(q10_pred - 0.21, 2)
-        conformal_upper = round(q90_pred + 0.21, 2)
+        conformal_lower = round(q10_pred - cal["margin_c"], 2)
+        conformal_upper = round(q90_pred + cal["margin_c"], 2)
 
         return {
             "status": "success",
@@ -528,22 +563,28 @@ async def get_ml_prediction(
             "forecast_horizon": "T+24h",
             "forecast_origin_utc": now_utc.isoformat(),
             "point_temperature_c": round(predicted_point, 2),
+            "point_forecast_method": {
+                "formula": "w * XGBoost + (1 - w) * current temperature",
+                "persistence_blend_weight": models["blend_weight"],
+                "xgboost_component_c": round(raw_xgb_point, 2),
+                "current_temperature_c": round(current_temp, 2),
+            },
             "quantile_forecast_c": {
                 "p10": round(q10_pred, 2),
                 "p50_median": round(q50_pred, 2),
                 "p90": round(q90_pred, 2),
                 "raw_interval_width_c": round(q90_pred - q10_pred, 2),
-                "raw_empirical_coverage_pct": 72.9
+                "raw_empirical_coverage_pct": cal["raw_coverage_pct"]
             },
             "split_conformal_interval_80": {
                 "nominal_coverage_pct": 80.0,
-                "calibrated_empirical_coverage_pct": 82.1,
-                "conformal_adjustment_margin_c": 0.21,
+                "calibrated_empirical_coverage_pct": cal["calibrated_coverage_pct"],
+                "conformal_adjustment_margin_c": cal["margin_c"],
                 "calibrated_lower_c": conformal_lower,
                 "calibrated_upper_c": conformal_upper,
                 "calibrated_interval_width_c": round(conformal_upper - conformal_lower, 2),
-                "finite_sample_quantile_index": 3127,
-                "validation_sample_size": 3907
+                "finite_sample_quantile_index": cal["quantile_index"],
+                "validation_sample_size": cal["validation_size"]
             },
             "precipitation_risk_24h": {
                 "target": "Rainfall occurrence >= 0.1 mm/h",
@@ -559,7 +600,7 @@ async def get_ml_prediction(
                 "inference_lag_source": "Open-Meteo Forecast API (past_days=2, recent NWP forecast blend)",
                 "domain_shift_notice": "Training inputs utilize historical reanalysis whereas live inference uses recent archived NWP forecast outputs; operational predictive skill in production deployment remains an experimental application."
             },
-            "scientific_disclaimer": "This forecast is produced directly by WeatherGPT's trained XGBoost models. At live inference, feature lags are derived from recent past forecast data (Open-Meteo Forecast API past_days=2), whereas training utilized historical ERA5/ERA5-Land reanalysis. Evaluated on held-out test data (82.1% empirical conformal coverage, 0.123 precipitation Brier score). Split conformal exchangeability is an empirical measurement on the test period, not an unconditional non-stationary guarantee."
+            "scientific_disclaimer": "This forecast is produced directly by WeatherGPT's trained XGBoost models. At live inference, feature lags are derived from recent past forecast data (Open-Meteo Forecast API past_days=2), whereas training utilized historical ERA5/ERA5-Land reanalysis. Evaluated on held-out test data (see /api/forecast/benchmarks for coverage and Brier score). Split conformal exchangeability is an empirical measurement on the test period, not an unconditional non-stationary guarantee."
         }
     except HTTPException:
         raise

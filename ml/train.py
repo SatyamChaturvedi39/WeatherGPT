@@ -214,6 +214,38 @@ def run_benchmark():
         print(f"  Horizon T+{h:2d}h -> Pers MAE: {mae_pers:.2f}°C | Clim MAE: {mae_clim:.2f}°C | XGB MAE: {mae_xgb:.2f}°C (Gain vs Pers: {gain_over_pers:+.1f}%)")
 
     # ─────────────────────────────────────────────────────────────
+    # 1b. T+24h PERSISTENCE BLEND (weight fitted on validation only)
+    # ─────────────────────────────────────────────────────────────
+    # At T+24h the diurnal persistence forecast (y_{t+24} ~ y_t) is very strong,
+    # and the raw XGBoost model alone does not beat it on held-out data. The live
+    # T+24h point forecast is therefore a convex blend
+    #     y_hat = w * xgb(x) + (1 - w) * y_t
+    # with w chosen to minimise MAE on the validation split (test set untouched).
+    curr_temp_val = val_df["temperature_2m"].values
+    y_val_24_pt = val_df["target_t24"].values
+    y_test_24_pt = test_df["target_t24"].values
+    xgb24_val = models_point[24].predict(X_val)
+    xgb24_test = models_point[24].predict(X_test)
+    blend_grid = np.round(np.linspace(0.0, 1.0, 21), 2)
+    val_maes = [mean_absolute_error(y_val_24_pt, w * xgb24_val + (1 - w) * curr_temp_val) for w in blend_grid]
+    blend_w = float(blend_grid[int(np.argmin(val_maes))])
+    blend_test = blend_w * xgb24_test + (1 - blend_w) * curr_temp_test
+    mae_blend = float(mean_absolute_error(y_test_24_pt, blend_test))
+    rmse_blend = float(np.sqrt(mean_squared_error(y_test_24_pt, blend_test)))
+    row24 = next(r for r in horizon_results if r["horizon"] == "T+24h")
+    row24.update({
+        "xgboost_raw_mae": row24["xgboost_mae"],
+        "xgboost_raw_rmse": row24["xgboost_rmse"],
+        "xgboost_mae": round(mae_blend, 2),
+        "xgboost_rmse": round(rmse_blend, 2),
+        "xgboost_gain_vs_persistence_pct": round((row24["persistence_mae"] - mae_blend) / row24["persistence_mae"] * 100, 1),
+        "xgboost_gain_vs_climatology_pct": round((row24["climatology_mae"] - mae_blend) / row24["climatology_mae"] * 100, 1),
+        "persistence_blend_weight": blend_w,
+    })
+    print(f"  T+24h persistence blend: w={blend_w:.2f} (validation-selected) -> test MAE {mae_blend:.3f}°C "
+          f"vs raw XGB {row24['xgboost_raw_mae']:.2f}°C vs persistence {row24['persistence_mae']:.2f}°C")
+
+    # ─────────────────────────────────────────────────────────────
     # 2. QUANTILE REGRESSION & SPLIT CONFORMAL CALIBRATION (T+24h)
     # ─────────────────────────────────────────────────────────────
     print("\nTraining XGBoost Quantile Regressors (tau=0.10, 0.25, 0.50, 0.75, 0.90)...")
@@ -416,6 +448,12 @@ def run_benchmark():
     with open(os.path.join(ARTIFACTS_DIR, "feature_names.json"), "w") as f:
         json.dump(feature_cols, f, indent=2)
     np.save(os.path.join(ARTIFACTS_DIR, "shap_background.npy"), shap_background)
+    with open(os.path.join(ARTIFACTS_DIR, "t24_blend.json"), "w") as f:
+        json.dump({
+            "persistence_blend_weight": blend_w,
+            "formula": "y_hat = w * xgboost_t24_point(x) + (1 - w) * temperature_2m(t)",
+            "selected_on": "validation split (minimum MAE over w in 0.00..1.00 step 0.05)",
+        }, f, indent=2)
 
     artifact_manifest = [
         {"filename": "xgboost_t1_point.json", "target": "temperature_2m (T+1h)", "type": "XGBRegressor", "status": "Offline Benchmark Artifact"},
@@ -429,6 +467,7 @@ def run_benchmark():
         {"filename": "xgboost_precipitation_t24.json", "target": "rain >= 0.1mm (T+24h)", "type": "XGBClassifier", "status": "Serialized Precipitation Classifier"},
         {"filename": "feature_names.json", "target": "34 Input Features Schema", "type": "JSON Metadata", "status": "Active Live Inference Alignment"},
         {"filename": "shap_background.npy", "target": "TreeSHAP Background Samples (N=100)", "type": "NumPy Array", "status": "Explainability Reference Data"},
+        {"filename": "t24_blend.json", "target": "T+24h persistence blend weight", "type": "JSON Metadata", "status": "Active Live Inference"},
         {"filename": "benchmark_results.json", "target": "Evaluation Metrics & Manifest", "type": "JSON Report", "status": "Active API Telemetry Source"},
     ]
 
@@ -448,7 +487,12 @@ def run_benchmark():
             "val_observations": len(val_df),
             "test_observations": len(test_df),
             "total_observations": n,
-            "split_accounting_reconciliation": "26,280 raw rows -> 26,208 candidate rows after lag/target drops -> 48 boundary rows excluded by two 24h purge gaps -> 26,160 assigned rows (18,321 train + 3,907 val + 3,932 test)",
+            "split_accounting_reconciliation": (
+                f"{raw_count:,} raw rows -> {n:,} candidate rows after lag/target drops -> "
+                f"{embargo_h * 2} boundary rows excluded by two {embargo_h}h purge gaps -> "
+                f"{len(train_df) + len(val_df) + len(test_df):,} assigned rows "
+                f"({len(train_df):,} train + {len(val_df):,} val + {len(test_df):,} test)"
+            ),
             "evaluation_methodology": "Chronological Holdout Evaluation with 24-Hour Purge/Embargo Gap (Zero Target Leakage)",
             "purge_gap_hours": embargo_h,
             "train_val_test_split": f"Train ({len(train_df)}) / Val ({len(val_df)}) / Test ({len(test_df)})",
@@ -499,7 +543,15 @@ def run_benchmark():
         "top_shap_features": feature_importances,
         "artifact_manifest": artifact_manifest,
         "scientific_notes": {
-            "diurnal_persistence_barrier": "At T+24h, 24-hour diurnal lag persistence (y_{t+24} ~ y_t) achieves an MAE of 0.75°C due to strong daily periodicity in Bengaluru's tropical plateau climate. At intermediate horizons (T+1h, T+6h), persistence degrades rapidly (4.03°C MAE at T+6h), where XGBoost provides dramatic error reductions (+56.3% at T+1h, +80.2% at T+6h).",
+            "diurnal_persistence_barrier": (
+                f"At T+24h, diurnal persistence (y_{{t+24}} ~ y_t) achieves an MAE of {row24['persistence_mae']:.2f}°C "
+                f"due to strong daily periodicity; raw XGBoost reaches {row24['xgboost_raw_mae']:.2f}°C, so the live "
+                f"T+24h forecast blends it with persistence (w={blend_w:.2f}, chosen on validation), giving "
+                f"{row24['xgboost_mae']:.2f}°C ({row24['xgboost_gain_vs_persistence_pct']:+.1f}% vs persistence). "
+                f"At T+1h and T+6h XGBoost alone gives "
+                f"{horizon_results[0]['xgboost_gain_vs_persistence_pct']:+.1f}% and "
+                f"{horizon_results[1]['xgboost_gain_vs_persistence_pct']:+.1f}% vs persistence."
+            ),
             "host_runtime_limitation": "PyTorch LSTM benchmark was excluded due to host Windows runtime DLL dependency conflict (torch.c10.dll WinError 1114). Documented honestly in thesis defense report.",
         }
     }

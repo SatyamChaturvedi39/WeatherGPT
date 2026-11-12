@@ -481,8 +481,9 @@ class TestScientificValidation:
             bm = json.load(f)
 
         manifest = bm["artifact_manifest"]
-        model_artifacts = [item for item in manifest if item["filename"].endswith(".json") and item["filename"] != "benchmark_results.json" and item["filename"] != "feature_names.json"]
+        model_artifacts = [item for item in manifest if item["type"].startswith("XGB")]
         assert len(model_artifacts) == 9
+        assert (art_dir / "t24_blend.json").exists()
 
         for item in model_artifacts:
             model_path = art_dir / item["filename"]

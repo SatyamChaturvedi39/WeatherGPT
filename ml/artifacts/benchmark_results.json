@@ -47,10 +47,13 @@
       "persistence_rmse": 1.07,
       "climatology_mae": 1.55,
       "climatology_rmse": 1.94,
-      "xgboost_mae": 0.82,
-      "xgboost_rmse": 1.07,
-      "xgboost_gain_vs_persistence_pct": -9.1,
-      "xgboost_gain_vs_climatology_pct": 47.5
+      "xgboost_mae": 0.74,
+      "xgboost_rmse": 1.01,
+      "xgboost_gain_vs_persistence_pct": 0.8,
+      "xgboost_gain_vs_climatology_pct": 52.0,
+      "xgboost_raw_mae": 0.82,
+      "xgboost_raw_rmse": 1.07,
+      "persistence_blend_weight": 0.55
     }
   ],
   "precipitation_classification_benchmark": {
@@ -290,6 +293,12 @@
       "status": "Explainability Reference Data"
     },
     {
+      "filename": "t24_blend.json",
+      "target": "T+24h persistence blend weight",
+      "type": "JSON Metadata",
+      "status": "Active Live Inference"
+    },
+    {
       "filename": "benchmark_results.json",
       "target": "Evaluation Metrics & Manifest",
       "type": "JSON Report",
@@ -297,7 +306,7 @@
     }
   ],
   "scientific_notes": {
-    "diurnal_persistence_barrier": "At T+24h, 24-hour diurnal lag persistence (y_{t+24} ~ y_t) achieves an MAE of 0.75\u00b0C due to strong daily periodicity in Bengaluru's tropical plateau climate. At intermediate horizons (T+1h, T+6h), persistence degrades rapidly (4.03\u00b0C MAE at T+6h), where XGBoost provides dramatic error reductions (+56.3% at T+1h, +80.2% at T+6h).",
+    "diurnal_persistence_barrier": "At T+24h, diurnal persistence (y_{t+24} ~ y_t) achieves an MAE of 0.75\u00b0C due to strong daily periodicity; raw XGBoost reaches 0.82\u00b0C, so the live T+24h forecast blends it with persistence (w=0.55, chosen on validation), giving 0.74\u00b0C (+0.8% vs persistence). At T+1h and T+6h XGBoost alone gives +56.3% and +80.2% vs persistence.",
     "host_runtime_limitation": "PyTorch LSTM benchmark was excluded due to host Windows runtime DLL dependency conflict (torch.c10.dll WinError 1114). Documented honestly in thesis defense report."
   }
 }
