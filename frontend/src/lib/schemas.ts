@@ -104,17 +104,14 @@ export const AdminStatusSchema = z.object({
     status: z.enum(['healthy', 'degraded', 'failing']).catch('degraded'),
     database_connected: z.boolean().default(false),
     open_meteo_reachable: z.boolean().default(false),
-    scheduler_active: z.boolean().default(false),
     issues: z.array(z.string()).default([]),
   }),
-  ingestion: z.object({
-    last_run_time: z.string().nullable().default(null),
-    last_run_status: z.string().default('never_run'),
-    last_rows_ingested: z.coerce.number().default(0),
-    total_locations: z.coerce.number().default(0),
-    total_observation_rows: z.coerce.number().default(0),
-    scheduler_running: z.boolean().default(false),
-  }),
+  records: z.object({
+    crowd_reports: z.number().nullable().default(null),
+    alert_events: z.number().nullable().default(null),
+  }).default({ crowd_reports: null, alert_events: null }),
+  models_loaded: z.coerce.number().default(0),
+  models_total: z.coerce.number().default(0),
   model_metrics: z.array(
     z.object({
       model_name: z.string().default(''),
@@ -129,7 +126,7 @@ export const AdminStatusSchema = z.object({
         })
       ).default([]),
       overall_mae: z.coerce.number().default(0),
-      overall_rmse: z.coerce.number().default(0),
+      overall_rmse: z.number().nullable().default(null),
     })
   ).default([]),
   system_latency_ms: z.record(z.string(), z.coerce.number()).default({}),

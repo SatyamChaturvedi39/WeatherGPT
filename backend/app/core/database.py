@@ -16,6 +16,9 @@ engine = create_engine(
     max_overflow=10,
 )
 
+# Result of the startup connection attempt (set in app.main lifespan)
+DB_STATUS: dict = {"connected": False, "error": "not initialised"}
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 

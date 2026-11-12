@@ -315,6 +315,7 @@ export const api = {
     const svc = json?.services ?? {};
     const om = svc.open_meteo_api ?? {};
     const db = svc.database ?? {};
+    const stores = svc.local_stores ?? {};
     const models: Json[] = svc.ml_inference_engine?.models ?? [];
     const operational = json?.status === 'operational';
     const issues: string[] = [];
@@ -327,33 +328,31 @@ export const api = {
           status: operational && !issues.length ? 'healthy' : operational ? 'degraded' : 'failing',
           database_connected: db.status === 'active',
           open_meteo_reachable: om.status === 'healthy',
-          scheduler_active: operational,
           issues,
         },
-        ingestion: {
-          last_run_time: json?.timestamp ?? null,
-          last_run_status: om.status ?? 'unknown',
-          last_rows_ingested: om.calls_today ?? 0,
-          total_locations: 25,
-          total_observation_rows: db.observations_stored ?? 0,
-          scheduler_running: operational,
+        records: {
+          crowd_reports: stores.crowd_reports ?? null,
+          alert_events: stores.alert_events ?? null,
         },
+        models_loaded: models.filter((m) => m.status === 'loaded').length,
+        models_total: models.length,
         model_metrics: models
           .filter((m) => m.mae_temperature)
           .map((m) => {
             const mae = parseFloat(String(m.mae_temperature)) || 0;
+            const horizons: Json[] = Array.isArray(m.horizons) ? m.horizons : [];
+            const rmse24 = horizons.find((h) => h.horizon_hours === 24)?.rmse;
             return {
-              model_name: `${m.name} ${m.version ?? ''}`.trim(),
+              model_name: String(m.name ?? ''),
               target: m.task ?? '',
-              horizons: [],
+              horizons,
               overall_mae: mae,
-              overall_rmse: mae,
+              overall_rmse: rmse24 ?? null,
             };
           }),
         system_latency_ms: {
           total_admin_ms: Math.round(totalMs * 10) / 10,
-          open_meteo_probe_ms: om.avg_latency_ms ?? 0,
-          db_query_ms: 0,
+          ...(om.avg_latency_ms != null ? { open_meteo_last_call_ms: om.avg_latency_ms } : {}),
         },
         server_time: json?.timestamp,
       },

@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.core.database import engine, Base
+from app.core.database import engine, Base, DB_STATUS
 from app.api import forecast, alerts, chat, settings as settings_router, admin, flood
 
 settings = get_settings()
@@ -21,7 +21,9 @@ async def lifespan(app: FastAPI):
     """Create database tables on startup if available."""
     try:
         Base.metadata.create_all(bind=engine)
+        DB_STATUS.update(connected=True, error=None)
     except Exception as exc:
+        DB_STATUS.update(connected=False, error=str(exc).splitlines()[0][:200])
         print(f"[Notice] Database initialization deferred: {exc}")
     yield
 

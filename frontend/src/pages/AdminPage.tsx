@@ -1,12 +1,12 @@
 import React from 'react';
-import { Database, Gauge, Clock } from 'lucide-react';
+import { Database, Gauge, Cpu } from 'lucide-react';
 import { useAdminStatus } from '../hooks/useWeather';
 import { Card } from '../components/ui/Card';
 import { StatTile } from '../components/ui/StatTile';
 import { Badge } from '../components/ui/Badge';
 import { ErrorState } from '../components/ui/ErrorState';
 import { PageHeader } from '../components/layout/PageHeader';
-import { formatNumber, formatRelativeTime } from '../lib/formatters';
+import { formatNumber } from '../lib/formatters';
 
 export const AdminPage: React.FC = () => {
   const { data: admin, isLoading, isError, refetch } = useAdminStatus();
@@ -27,7 +27,7 @@ export const AdminPage: React.FC = () => {
     <div className="space-y-6">
       <PageHeader
         title="System Telemetry & Operations"
-        subtitle="Platform pipeline status, ingestion schedules, and ML model evaluation benchmarks."
+        subtitle="Platform service status, stored records, and held-out ML model benchmarks."
         updatedAt={admin?.server_time}
         onRefresh={() => refetch()}
         isRefreshing={isLoading}
@@ -57,22 +57,19 @@ export const AdminPage: React.FC = () => {
         </div>
 
         <StatTile
-          label="Observation Records"
-          value={formatNumber(admin?.ingestion.total_observation_rows, 0)}
-          trendText={`Across ${admin?.ingestion.total_locations || 0} monitored points`}
+          label="Stored Records"
+          value={formatNumber((admin?.records.crowd_reports ?? 0) + (admin?.records.alert_events ?? 0), 0)}
+          trendText={`${admin?.records.crowd_reports ?? '—'} crowd reports · ${admin?.records.alert_events ?? '—'} alert events`}
           icon={<Database className="w-4 h-4 stroke-[1.75]" />}
           loading={isLoading}
         />
 
         <StatTile
-          label="Ingestion Scheduler"
-          value={admin?.ingestion.scheduler_running ? 'Active' : 'Inactive'}
-          trendText={
-            admin?.ingestion.last_run_time
-              ? formatRelativeTime(admin.ingestion.last_run_time)
-              : 'Pending first run'
-          }
-          icon={<Clock className="w-4 h-4 stroke-[1.75]" />}
+          label="ML Models Loaded"
+          value={`${admin?.models_loaded ?? 0}`}
+          unit={`of ${admin?.models_total ?? 0}`}
+          trendText={admin && admin.models_loaded < admin.models_total ? 'Some artifacts missing' : 'All artifacts loaded'}
+          icon={<Cpu className="w-4 h-4 stroke-[1.75]" />}
           loading={isLoading}
         />
 
@@ -80,7 +77,11 @@ export const AdminPage: React.FC = () => {
           label="Admin Query Latency"
           value={formatNumber(admin?.system_latency_ms?.total_admin_ms, 1)}
           unit="ms"
-          trendText={`DB: ${admin?.system_latency_ms?.db_query_ms || 0}ms • Probe: ${admin?.system_latency_ms?.open_meteo_probe_ms || 0}ms`}
+          trendText={
+            admin?.system_latency_ms?.open_meteo_last_call_ms != null
+              ? `Last Open-Meteo call: ${admin.system_latency_ms.open_meteo_last_call_ms}ms`
+              : 'No Open-Meteo call yet'
+          }
           icon={<Gauge className="w-4 h-4 stroke-[1.75]" />}
           loading={isLoading}
         />

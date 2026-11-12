@@ -24,7 +24,8 @@ class WeatherService:
     _cache: dict[str, tuple[float, dict]] = {}
     _api_calls_count: int = 42
     _cache_hits_count: int = 156
-    _last_latency_ms: float = 142.6
+    # Latency of the most recent successful Open-Meteo call; None until one happens
+    _last_latency_ms: float | None = None
     _http_client: Optional[httpx.AsyncClient] = None
 
     @classmethod
