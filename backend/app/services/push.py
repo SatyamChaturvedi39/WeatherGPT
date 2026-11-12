@@ -80,10 +80,78 @@ class PushStore:
                 """
             )
 
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS push_flood_zones (
+                    endpoint TEXT NOT NULL,
+                    zone_id TEXT NOT NULL,
+                    PRIMARY KEY (endpoint, zone_id)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS push_flood_state (
+                    endpoint TEXT NOT NULL,
+                    zone_id TEXT NOT NULL,
+                    level TEXT NOT NULL,
+                    sent_at REAL NOT NULL,
+                    PRIMARY KEY (endpoint, zone_id)
+                )
+                """
+            )
+
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
+
+    # ── Flood zone warnings ──────────────────────────────────────
+    def set_flood_zones(self, endpoint: str, zone_ids: list[str]) -> None:
+        keep = set(zone_ids)
+        with self._connect() as conn:
+            conn.execute("DELETE FROM push_flood_zones WHERE endpoint = ?", (endpoint,))
+            conn.executemany("INSERT INTO push_flood_zones VALUES (?, ?)", [(endpoint, z) for z in sorted(keep)])
+            # Forget warning state for zones no longer watched
+            for r in conn.execute("SELECT zone_id FROM push_flood_state WHERE endpoint = ?", (endpoint,)).fetchall():
+                if r["zone_id"] not in keep:
+                    conn.execute("DELETE FROM push_flood_state WHERE endpoint = ? AND zone_id = ?", (endpoint, r["zone_id"]))
+
+    def flood_zones(self, endpoint: str) -> list[str]:
+        with self._connect() as conn:
+            return [r["zone_id"] for r in conn.execute(
+                "SELECT zone_id FROM push_flood_zones WHERE endpoint = ? ORDER BY zone_id", (endpoint,))]
+
+    def flood_watchers(self) -> list[dict]:
+        """(endpoint, keys, zone) rows for every flood-zone watch."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT f.endpoint, f.zone_id, s.p256dh, s.auth
+                FROM push_flood_zones f
+                JOIN (SELECT endpoint, MIN(p256dh) AS p256dh, MIN(auth) AS auth FROM push_subscriptions GROUP BY endpoint) s
+                  ON s.endpoint = f.endpoint
+                """
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def flood_state(self, endpoint: str, zone_id: str) -> str | None:
+        with self._connect() as conn:
+            r = conn.execute(
+                "SELECT level FROM push_flood_state WHERE endpoint = ? AND zone_id = ?", (endpoint, zone_id)
+            ).fetchone()
+        return r["level"] if r else None
+
+    def set_flood_state(self, endpoint: str, zone_id: str, level: str | None) -> None:
+        with self._connect() as conn:
+            if level is None:
+                conn.execute("DELETE FROM push_flood_state WHERE endpoint = ? AND zone_id = ?", (endpoint, zone_id))
+            else:
+                conn.execute(
+                    "INSERT INTO push_flood_state VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(endpoint, zone_id) DO UPDATE SET level = excluded.level, sent_at = excluded.sent_at",
+                    (endpoint, zone_id, level, time.time()),
+                )
 
     def subscribe(self, subscription: dict, locations: list[dict], min_severity: str) -> int:
         """Replace this endpoint's locations. Returns the number of locations stored."""
@@ -106,8 +174,8 @@ class PushStore:
 
     def unsubscribe(self, endpoint: str) -> None:
         with self._connect() as conn:
-            conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", (endpoint,))
-            conn.execute("DELETE FROM push_sent WHERE endpoint = ?", (endpoint,))
+            for table in ("push_subscriptions", "push_sent", "push_flood_zones", "push_flood_state"):
+                conn.execute(f"DELETE FROM {table} WHERE endpoint = ?", (endpoint,))
 
     def subscriptions(self, endpoint: str | None = None) -> list[dict]:
         with self._connect() as conn:
@@ -170,6 +238,46 @@ def build_payload(sub: dict, ev: dict, escalated: bool) -> str:
         "body": f"{prefix} for {sub['location_name']}. {ev['description']}".strip(),
         "url": "/alerts",
         "tag": f"alert-{ev['id']}",
+    })
+
+
+FLOOD_RANK = {"Clear": 0, "Watch": 1, "Warning": 2, "Severe": 3}
+FLOOD_NOTIFY_MIN = FLOOD_RANK["Warning"]
+
+
+def worst_flood_level(zone: dict) -> tuple[str, dict | None]:
+    """Worst level over the zone's forecast timeline and the first hour it occurs."""
+    worst, at = "Clear", None
+    for point in zone.get("timeline", []):
+        if FLOOD_RANK.get(point["level"], 0) > FLOOD_RANK[worst]:
+            worst, at = point["level"], point
+    return worst, at
+
+
+def flood_decision(previous: str | None, worst: str) -> tuple[bool, str | None]:
+    """
+    Whether to push for a watched zone, and the state to store afterwards.
+    Push when the zone reaches Warning/Severe for the first time in an episode
+    or gets worse; forget the episode once it drops back below Warning.
+    """
+    rank = FLOOD_RANK.get(worst, 0)
+    if rank < FLOOD_NOTIFY_MIN:
+        return False, None
+    if previous is None or rank > FLOOD_RANK.get(previous, 0):
+        return True, worst
+    return False, previous
+
+
+def build_flood_payload(zone: dict, level: str, point: dict, escalated: bool) -> str:
+    hour = (point.get("time") or "").split("T")[-1][:5]
+    pct = round(point.get("p_waterlog", 0) * 100)
+    prefix = "Risk upgraded. " if escalated else ""
+    return json.dumps({
+        "title": f"Flood {level}: {zone['name']}",
+        "body": f"{prefix}Road waterlogging likely around {hour} ({pct}% chance of >5 cm water). "
+                f"Median depth {point.get('depth_cm', {}).get('p50', '?')} cm.",
+        "url": "/flood-twin",
+        "tag": f"flood-{zone['id']}",
     })
 
 

@@ -100,3 +100,68 @@ def test_subscribe_status_unsubscribe_api(tmp_path, monkeypatch):
     c.post("/api/notifications/unsubscribe", json={"endpoint": SUB["endpoint"]})
     assert not c.post("/api/notifications/status", json={"endpoint": SUB["endpoint"]}).json()["subscribed"]
     assert c.post("/api/notifications/test", json={"endpoint": SUB["endpoint"]}).status_code == 404
+
+
+# ── Flood zone warnings ──────────────────────────────────────────
+
+def _zone(level_by_hour):
+    return {
+        "id": "koramangala",
+        "name": "Koramangala",
+        "timeline": [
+            {"time": f"2030-01-01T{h:02d}:00", "level": lvl, "p_waterlog": 0.9, "depth_cm": {"p50": 8.0}}
+            for h, lvl in enumerate(level_by_hour)
+        ],
+    }
+
+
+def _flood_setup(tmp_path):
+    push = PushStore(str(tmp_path / "p.db"))
+    push.subscribe(SUB, [{"latitude": LAT, "longitude": LON, "name": "Home"}], "HIGH")
+    push.set_flood_zones(SUB["endpoint"], ["koramangala"])
+    state = {"levels": ["Clear"] * 6}
+    sent = []
+
+    async def twin():
+        return {"zones": [_zone(state["levels"])]}
+
+    async def fake_send(sub, payload, store):
+        sent.append(json.loads(payload))
+        return True
+
+    def cycle():
+        return asyncio.run(notifications.run_flood_cycle(push, twin_fn=twin, send=fake_send))
+
+    return state, sent, cycle
+
+
+def test_flood_warning_lifecycle(tmp_path):
+    state, sent, cycle = _flood_setup(tmp_path)
+    assert cycle() == 0                                   # all clear
+    state["levels"] = ["Clear", "Watch", "Warning", "Warning", "Clear", "Clear"]
+    assert cycle() == 1                                   # enters Warning
+    assert sent[-1]["title"] == "Flood Warning: Koramangala" and "02:00" in sent[-1]["body"]
+    assert cycle() == 0                                   # still Warning: no repeat
+    state["levels"][3] = "Severe"
+    assert cycle() == 1 and sent[-1]["body"].startswith("Risk upgraded")
+    state["levels"] = ["Watch"] * 6
+    assert cycle() == 0                                   # drops below Warning: re-armed
+    state["levels"] = ["Warning"] * 6
+    assert cycle() == 1                                   # new episode notifies again
+
+
+def test_watch_level_never_notifies(tmp_path):
+    state, sent, cycle = _flood_setup(tmp_path)
+    state["levels"] = ["Watch"] * 6
+    assert cycle() == 0
+
+
+def test_unknown_flood_zone_rejected_and_status_lists_zones(tmp_path, monkeypatch):
+    store = PushStore(str(tmp_path / "api.db"))
+    monkeypatch.setattr(notifications, "get_push_store", lambda: store)
+    c = TestClient(app)
+    body = {"subscription": SUB, "locations": [{"latitude": LAT, "longitude": LON}]}
+    assert c.post("/api/notifications/subscribe", json={**body, "flood_zones": ["atlantis"]}).status_code == 422
+    assert c.post("/api/notifications/subscribe", json={**body, "flood_zones": ["koramangala", "koramangala"]}).json()["flood_zones"] == 1
+    st = c.post("/api/notifications/status", json={"endpoint": SUB["endpoint"]}).json()
+    assert st["flood_zones"] == ["koramangala"]

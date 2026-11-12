@@ -5,7 +5,9 @@ In-process background jobs, started from the FastAPI lifespan.
   the verification log fills up even without visitors, then verify forecasts
   whose target hour has passed.
 * Alert job (every 15 min): evaluate alerts at every location a browser has
-  subscribed to and send Web Push notifications for new or escalated alerts.
+  subscribed to and send Web Push notifications for new or escalated alerts,
+  then run the Flood Twin and warn watchers of Bengaluru zones heading for
+  Warning/Severe waterlogging in the next 6 hours.
 
 Jobs are best-effort: failures are logged and the loop keeps running.
 Disable with BACKGROUND_JOBS_ENABLED=false (the test suite does).
@@ -48,11 +50,17 @@ async def _loop(name: str, interval_s: int, fn) -> None:
 
 
 async def run_alert_cycle() -> None:
-    from app.api.notifications import run_alert_cycle as cycle
+    from app.api.notifications import run_alert_cycle as alerts, run_flood_cycle as floods
 
-    sent = await cycle()
+    sent = await alerts()
     if sent:
         print(f"[jobs] sent {sent} alert notifications")
+    try:
+        sent = await floods()
+        if sent:
+            print(f"[jobs] sent {sent} flood warnings")
+    except Exception as e:
+        print(f"[jobs] flood warning cycle failed: {e}")
 
 
 def start_background_jobs() -> list[asyncio.Task]:
