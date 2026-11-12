@@ -140,6 +140,7 @@ export interface MlPrediction {
     nwp_recent_bias_c?: number;
     nwp_bias_window_days?: number;
   };
+  training_domain?: { trained_on: string; distance_km: number; in_domain: boolean };
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */

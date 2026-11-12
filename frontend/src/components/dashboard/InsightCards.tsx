@@ -86,6 +86,15 @@ export const MlPredictionCard: React.FC<Loc> = ({ lat, lon }) => {
               </Badge>
             </span>
           </div>
+          {data.training_domain && !data.training_domain.in_domain && (
+            <div className="flex items-start gap-2 rounded-btn border border-risk-moderate-border bg-risk-moderate-bg p-2.5 text-2xs text-risk-moderate">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                These models were trained on {data.training_domain.trained_on} data, {Math.round(data.training_domain.distance_km).toLocaleString()} km
+                from here. Treat this prediction as experimental for this location.
+              </span>
+            </div>
+          )}
           {data.point_forecast_method?.method === 'nwp_corrected' ? (
             <p className="text-2xs text-text-muted">
               Uses Open-Meteo&apos;s forecast ({data.point_forecast_method.nwp_forecast_c?.toFixed(1)}°), corrected by its
