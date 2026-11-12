@@ -116,6 +116,14 @@ export function useMlPrediction(lat: number, lon: number) {
   return useQuery({ queryKey: ['ml-prediction', lat, lon], queryFn: () => api.getMlPrediction(lat, lon), staleTime: 1000 * 60 * 15, retry: false });
 }
 
+export function useForecastVerification(days = 30) {
+  return useQuery({
+    queryKey: ['admin', 'verification', days],
+    queryFn: () => api.getForecastVerification(days),
+    refetchInterval: 5 * 60 * 1000,
+  });
+}
+
 export function useBenchmarks() {
   return useQuery({ queryKey: ['benchmarks'], queryFn: api.getBenchmarks, staleTime: Infinity });
 }

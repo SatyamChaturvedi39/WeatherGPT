@@ -213,3 +213,28 @@ export interface CrowdReport {
   report_type: CrowdReportType;
   created_at: number;
 }
+
+export interface VerificationModelStats {
+  model: string;
+  n: number;
+  mae: number | null;
+  rmse: number | null;
+  bias: number | null;
+}
+
+export interface ForecastVerification {
+  horizon_hours: number;
+  truth_source: string;
+  window_days: number;
+  locations: number;
+  pending: number;
+  models: VerificationModelStats[];
+  recent: Array<{
+    location_key: string;
+    target_time: number;
+    actual: number;
+    xgboost_blend?: number;
+    persistence?: number;
+    open_meteo_nwp?: number;
+  }>;
+}

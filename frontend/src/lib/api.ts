@@ -32,6 +32,7 @@ import type {
   Microclimate,
   AlertsCenter,
   AlertHistoryItem,
+  ForecastVerification,
   AirQuality,
   MlPrediction,
   Benchmarks,
@@ -398,6 +399,9 @@ export const api = {
     getJson(`${API_BASE}/forecast/ml-prediction?${q(lat, lon)}`),
 
   getBenchmarks: async (): Promise<Benchmarks> => getJson(`${API_BASE}/forecast/benchmarks`),
+
+  getForecastVerification: async (days = 30): Promise<ForecastVerification> =>
+    getJson(`${API_BASE}/admin/verification?days=${days}`),
 
   getFloodTwin: async (hours = 6, scenarioMm = 0): Promise<FloodTwin> => {
     const json = await getJson(`${API_BASE}/flood/twin?hours=${hours}&scenario_mm=${scenarioMm}`);

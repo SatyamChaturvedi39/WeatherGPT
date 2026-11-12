@@ -7,6 +7,7 @@ import { Badge } from '../components/ui/Badge';
 import { ErrorState } from '../components/ui/ErrorState';
 import { PageHeader } from '../components/layout/PageHeader';
 import { formatNumber } from '../lib/formatters';
+import { ForecastVerificationCard } from '../components/admin/ForecastVerificationCard';
 
 export const AdminPage: React.FC = () => {
   const { data: admin, isLoading, isError, refetch } = useAdminStatus();
@@ -86,6 +87,8 @@ export const AdminPage: React.FC = () => {
           loading={isLoading}
         />
       </div>
+
+      <ForecastVerificationCard />
 
       {/* Model Benchmark Performance Table */}
       <Card
