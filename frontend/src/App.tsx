@@ -29,12 +29,15 @@ const queryClient = new QueryClient({
   },
 });
 
-/** Default fallback location (used only if geolocation is denied AND no saved location exists) */
+/**
+ * Default fallback location (used only if geolocation is denied AND no saved location exists).
+ * Bengaluru: the ML models, Flood Twin and microclimates are all built for it.
+ */
 const FALLBACK_LOCATION: SavedLocation = {
-  name: 'New York',
-  latitude: 40.7128,
-  longitude: -74.006,
-  timezone: 'UTC',
+  name: 'Bengaluru',
+  latitude: 12.9716,
+  longitude: 77.5946,
+  timezone: 'Asia/Kolkata',
   is_favorite: false,
 };
 

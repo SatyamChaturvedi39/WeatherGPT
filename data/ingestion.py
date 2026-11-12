@@ -5,8 +5,8 @@ Fetches historical and real-time weather data from Open-Meteo API
 and stores it in the database for ML training and analysis.
 
 Usage:
-    python ingestion.py --lat 40.7128 --lon -74.0060 --days 365
-    python ingestion.py --lat 40.7128 --lon -74.0060 --mode realtime
+    python ingestion.py --lat 12.9716 --lon 77.5946 --days 365
+    python ingestion.py --lat 12.9716 --lon 77.5946 --mode realtime
 """
 
 import argparse

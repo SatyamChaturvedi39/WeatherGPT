@@ -31,8 +31,8 @@ Payload:
 {
   "session_id": "session-123",
   "message": "Is it safe to run outside?",
-  "lat": 40.7128,
-  "lon": -74.0060,
+  "lat": 12.9716,
+  "lon": 77.5946,
   "activity": "running"
 }
 ```
