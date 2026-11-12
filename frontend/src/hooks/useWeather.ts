@@ -61,6 +61,16 @@ export function useAdminStatus() {
 }
 
 // ─── Feats-branch feature hooks ──────────────────────────────────────────────
+export function useRouteDepartures(origin: string, destination: string, mode: string) {
+  return useQuery({
+    queryKey: ['route-departures', origin, destination, mode],
+    queryFn: () => api.getRouteDepartures(origin, destination, mode),
+    enabled: origin.trim().length > 1 && destination.trim().length > 1,
+    staleTime: 1000 * 60 * 10,
+    retry: false,
+  });
+}
+
 export function useRouteForecast(origin: string, destination: string, mode: string, enabled: boolean) {
   return useQuery({
     queryKey: ['route', origin, destination, mode],

@@ -253,3 +253,25 @@ export interface ForecastVerification {
     models: RainVerificationModelStats[];
   };
 }
+
+export interface DepartureSlot {
+  depart_ts: number;
+  arrive_ts: number;
+  max_rain_probability: number | null;
+  max_rain_mm_h: number | null;
+  wet: boolean;
+}
+
+export interface RouteDepartures {
+  origin: string;
+  destination: string;
+  transit_mode: string;
+  distance_km: number;
+  trip_minutes: number;
+  timezone: string | null;
+  utc_offset_seconds: number | null;
+  slots: DepartureSlot[];
+  best: DepartureSlot;
+  leave_now: DepartureSlot;
+  method: string;
+}

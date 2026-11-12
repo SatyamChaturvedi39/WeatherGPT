@@ -10,6 +10,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { useRouteForecast } from '../hooks/useWeather';
 import { scoreVariant } from '../lib/severity';
 import { iconForCode } from '../landing/weatherTheme';
+import { BestDepartureCard } from '../components/route/BestDepartureCard';
 
 const MODES = [
   { value: 'two_wheeler', label: '🛵 Two-wheeler' },
@@ -142,6 +143,8 @@ export const RoutePage: React.FC = () => {
               icon={<AlertTriangle className="h-4 w-4" />}
             />
           </div>
+
+          {submitted && <BestDepartureCard origin={submitted.o} destination={submitted.d} mode={submitted.m} />}
 
           <div className="grid gap-6 lg:grid-cols-12">
             <Card className="lg:col-span-7" title="Corridor waypoints" subtitle={`${data.origin} → ${data.destination}`}>

@@ -33,6 +33,7 @@ import type {
   AlertsCenter,
   AlertHistoryItem,
   ForecastVerification,
+  RouteDepartures,
   AirQuality,
   MlPrediction,
   Benchmarks,
@@ -399,6 +400,13 @@ export const api = {
     getJson(`${API_BASE}/forecast/ml-prediction?${q(lat, lon)}`),
 
   getBenchmarks: async (): Promise<Benchmarks> => getJson(`${API_BASE}/forecast/benchmarks`),
+
+  getRouteDepartures: async (origin: string, destination: string, mode = 'two_wheeler'): Promise<RouteDepartures> => {
+    const json = await getJson(
+      `${API_BASE}/forecast/route/departures?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&transit_mode=${encodeURIComponent(mode)}`
+    );
+    return json.data;
+  },
 
   getForecastVerification: async (days = 30): Promise<ForecastVerification> =>
     getJson(`${API_BASE}/admin/verification?days=${days}`),
