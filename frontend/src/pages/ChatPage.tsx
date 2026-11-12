@@ -17,8 +17,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({ location, activity }) => {
       id: 'initial',
       sender: 'assistant',
       text: `Hello! I am WeatherGPT, grounded strictly in verified meteorological data for ${location.name}. Ask me about rain probabilities, outdoor conditions for ${activity}, or temperature trajectories.`,
-      sources: ['Open-Meteo High-Resolution NWP Ingestion Stream'],
-      confidence: 1.0,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
