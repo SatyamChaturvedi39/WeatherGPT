@@ -222,6 +222,14 @@ export interface VerificationModelStats {
   bias: number | null;
 }
 
+export interface RainVerificationModelStats {
+  model: string;
+  n: number;
+  brier: number | null;
+  mean_probability: number | null;
+  observed_frequency: number | null;
+}
+
 export interface ForecastVerification {
   horizon_hours: number;
   truth_source: string;
@@ -237,4 +245,10 @@ export interface ForecastVerification {
     persistence?: number;
     open_meteo_nwp?: number;
   }>;
+  rain: {
+    event: string;
+    score: string;
+    pending: number;
+    models: RainVerificationModelStats[];
+  };
 }

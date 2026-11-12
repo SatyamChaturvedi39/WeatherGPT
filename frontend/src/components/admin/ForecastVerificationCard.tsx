@@ -11,13 +11,21 @@ const MODEL_LABEL: Record<string, string> = {
   xgboost_blend: 'WeatherGPT (XGBoost blend)',
   persistence: 'Persistence (same as now)',
   open_meteo_nwp: 'Open-Meteo forecast',
+  xgboost_rain: 'WeatherGPT rain classifier',
+  open_meteo_rain: 'Open-Meteo rain probability',
+  climatology_rain: 'Climatology (training base rate)',
 };
 
 const MODEL_COLOR: Record<string, string> = {
   xgboost_blend: '#2563eb',
   persistence: '#9ca3af',
   open_meteo_nwp: '#f59e0b',
+  xgboost_rain: '#2563eb',
+  open_meteo_rain: '#f59e0b',
+  climatology_rain: '#9ca3af',
 };
+
+const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v * 100)}%`);
 
 const signed = (v: number | null) => (v == null ? '—' : `${v > 0 ? '+' : ''}${formatNumber(v, 2)}`);
 
@@ -102,6 +110,40 @@ export const ForecastVerificationCard: React.FC = () => {
               </LineChart>
             </ResponsiveContainer>
           )}
+
+          <div className="space-y-2 border-t border-border-subtle pt-4">
+            <div className="text-sm font-medium text-text-primary">Rain in the target hour</div>
+            <p className="text-2xs text-text-muted">
+              Event: {data.rain.event}. Scored by Brier score (lower is better, 0 is perfect). {data.rain.pending} waiting.
+            </p>
+            <div className="overflow-x-auto -mx-5">
+              <table className="w-full text-left text-xs" aria-label="Live rain forecast accuracy by model">
+                <thead className="bg-app-subtle border-y border-border-subtle text-text-secondary font-medium">
+                  <tr>
+                    <th className="py-2.5 px-5">Model</th>
+                    <th className="py-2.5 px-5 tabular-nums">Verified</th>
+                    <th className="py-2.5 px-5 tabular-nums">Brier</th>
+                    <th className="py-2.5 px-5 tabular-nums">Avg. forecast</th>
+                    <th className="py-2.5 px-5 tabular-nums">Rained</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-subtle text-text-primary">
+                  {data.rain.models.map((m) => (
+                    <tr key={m.model}>
+                      <td className="py-2.5 px-5 font-medium">
+                        <span className="mr-2 inline-block h-2 w-2 rounded-full" style={{ background: MODEL_COLOR[m.model] }} />
+                        {MODEL_LABEL[m.model] ?? m.model}
+                      </td>
+                      <td className="py-2.5 px-5 font-mono tabular-nums">{m.n}</td>
+                      <td className="py-2.5 px-5 font-mono tabular-nums">{m.brier == null ? '—' : formatNumber(m.brier, 3)}</td>
+                      <td className="py-2.5 px-5 font-mono tabular-nums">{pct(m.mean_probability)}</td>
+                      <td className="py-2.5 px-5 font-mono tabular-nums">{pct(m.observed_frequency)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
           <p className="text-2xs text-text-muted">
             Truth: {data.truth_source}. {data.pending} forecasts waiting for their target hour · {data.locations} location(s).
