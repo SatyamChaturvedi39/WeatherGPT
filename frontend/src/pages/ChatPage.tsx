@@ -11,6 +11,13 @@ interface ChatPageProps {
   activity: string;
 }
 
+/** Render **bold** spans from model replies; everything else stays plain text. */
+function renderInlineMarkdown(text: string): React.ReactNode[] {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+    part.startsWith('**') && part.endsWith('**') && part.length > 4 ? <strong key={i}>{part.slice(2, -2)}</strong> : part
+  );
+}
+
 export const ChatPage: React.FC<ChatPageProps> = ({ location, activity }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -122,7 +129,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ location, activity }) => {
                     : 'bg-app-subtle border border-border-subtle text-text-primary'
                 }`}
               >
-                <p>{msg.text}</p>
+                <p className="whitespace-pre-line">{renderInlineMarkdown(msg.text)}</p>
 
                 {/* Source chips & confidence */}
                 {msg.sender === 'assistant' && (
