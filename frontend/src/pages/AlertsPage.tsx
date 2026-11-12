@@ -73,9 +73,9 @@ export const AlertsPage: React.FC<Props> = ({ location }) => {
                   <Badge variant={severityVariant(a.severity)} size="sm">{a.severity}</Badge>
                   <h3 className="text-sm font-semibold text-text-primary">{a.title}</h3>
                 </div>
-                <span className="text-2xs tabular-nums text-text-muted">
-                  confidence {Math.round((a.confidence ?? 0) * 100)}%
-                </span>
+                {typeof a.confidence === 'number' && (
+                  <span className="text-2xs tabular-nums text-text-muted">confidence {Math.round(a.confidence * 100)}%</span>
+                )}
               </div>
               <p className="mt-2 text-sm text-text-secondary">{a.description}</p>
               <div className="mt-3 rounded-btn bg-app-subtle px-3 py-2 text-xs text-text-secondary">

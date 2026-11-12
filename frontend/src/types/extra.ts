@@ -76,7 +76,8 @@ export interface WeatherAlert {
   description: string;
   recommendation: string;
   triggered_by: string;
-  confidence: number;
+  /** Only present when backed by a calibrated model; rule-based alerts omit it */
+  confidence?: number;
   anomaly_score?: number;
 }
 
