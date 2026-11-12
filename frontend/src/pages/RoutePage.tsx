@@ -161,9 +161,9 @@ export const RoutePage: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-3 text-xs text-text-secondary tabular-nums">
                           <Icon className="h-4 w-4 text-accent" />
-                          <span>{w.temperature.toFixed(1)}°</span>
-                          <span>{w.precipitation.toFixed(1)} mm</span>
-                          <span>{w.wind_speed.toFixed(0)} km/h</span>
+                          <span>{w.temperature == null ? '—' : `${w.temperature.toFixed(1)}°`}</span>
+                          <span>{w.precipitation == null ? '—' : `${w.precipitation.toFixed(1)} mm`}</span>
+                          <span>{w.wind_speed == null ? '—' : `${w.wind_speed.toFixed(0)} km/h`}</span>
                         </div>
                       </div>
                       {w.hazard && (

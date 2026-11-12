@@ -6,10 +6,11 @@ export interface RouteWaypoint {
   latitude: number;
   longitude: number;
   distance_km: number;
-  temperature: number;
-  precipitation: number;
-  wind_speed: number;
-  weather_code: number;
+  /** null when conditions could not be fetched for this waypoint */
+  temperature: number | null;
+  precipitation: number | null;
+  wind_speed: number | null;
+  weather_code: number | null;
   hazard: string | null;
   eta_mins: number;
 }
