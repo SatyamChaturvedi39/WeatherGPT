@@ -1,0 +1,468 @@
+{
+  "point_temperature_comparison": [
+    {
+      "Horizon": "T+1h",
+      "Model": "Persistence Baseline",
+      "Family": "Naive",
+      "MAE (\u00b0C)": 0.818,
+      "RMSE (\u00b0C)": 1.066,
+      "R2": 0.906,
+      "Train Time (s)": 0.0
+    },
+    {
+      "Horizon": "T+1h",
+      "Model": "Diurnal Climatology",
+      "Family": "Statistical",
+      "MAE (\u00b0C)": 1.563,
+      "RMSE (\u00b0C)": 1.947,
+      "R2": 0.685,
+      "Train Time (s)": 0.01
+    },
+    {
+      "Horizon": "T+1h",
+      "Model": "XGBoost (WeatherGPT)",
+      "Family": "GBDT",
+      "MAE (\u00b0C)": 0.358,
+      "RMSE (\u00b0C)": 0.52,
+      "R2": 0.978,
+      "Train Time (s)": 0.5
+    },
+    {
+      "Horizon": "T+1h",
+      "Model": "PyTorch LSTM (24h Seq)",
+      "Family": "Deep Learning",
+      "MAE (\u00b0C)": 0.864,
+      "RMSE (\u00b0C)": 1.094,
+      "R2": 0.901,
+      "Train Time (s)": 23.19
+    },
+    {
+      "Horizon": "T+6h",
+      "Model": "Persistence Baseline",
+      "Family": "Naive",
+      "MAE (\u00b0C)": 4.032,
+      "RMSE (\u00b0C)": 4.778,
+      "R2": -0.896,
+      "Train Time (s)": 0.0
+    },
+    {
+      "Horizon": "T+6h",
+      "Model": "Diurnal Climatology",
+      "Family": "Statistical",
+      "MAE (\u00b0C)": 1.56,
+      "RMSE (\u00b0C)": 1.944,
+      "R2": 0.686,
+      "Train Time (s)": 0.01
+    },
+    {
+      "Horizon": "T+6h",
+      "Model": "XGBoost (WeatherGPT)",
+      "Family": "GBDT",
+      "MAE (\u00b0C)": 0.797,
+      "RMSE (\u00b0C)": 1.034,
+      "R2": 0.911,
+      "Train Time (s)": 0.4
+    },
+    {
+      "Horizon": "T+6h",
+      "Model": "PyTorch LSTM (24h Seq)",
+      "Family": "Deep Learning",
+      "MAE (\u00b0C)": 1.396,
+      "RMSE (\u00b0C)": 1.771,
+      "R2": 0.74,
+      "Train Time (s)": 23.19
+    },
+    {
+      "Horizon": "T+24h",
+      "Model": "Persistence Baseline",
+      "Family": "Naive",
+      "MAE (\u00b0C)": 0.748,
+      "RMSE (\u00b0C)": 1.073,
+      "R2": 0.905,
+      "Train Time (s)": 0.0
+    },
+    {
+      "Horizon": "T+24h",
+      "Model": "Diurnal Climatology",
+      "Family": "Statistical",
+      "MAE (\u00b0C)": 1.554,
+      "RMSE (\u00b0C)": 1.939,
+      "R2": 0.69,
+      "Train Time (s)": 0.01
+    },
+    {
+      "Horizon": "T+24h",
+      "Model": "XGBoost (WeatherGPT)",
+      "Family": "GBDT",
+      "MAE (\u00b0C)": 0.816,
+      "RMSE (\u00b0C)": 1.072,
+      "R2": 0.905,
+      "Train Time (s)": 0.38
+    },
+    {
+      "Horizon": "T+24h",
+      "Model": "PyTorch LSTM (24h Seq)",
+      "Family": "Deep Learning",
+      "MAE (\u00b0C)": 1.147,
+      "RMSE (\u00b0C)": 1.516,
+      "R2": 0.81,
+      "Train Time (s)": 23.19
+    },
+    {
+      "Horizon": "T+1h",
+      "Model": "Ridge Regression",
+      "Family": "Linear",
+      "MAE (\u00b0C)": 0.391,
+      "RMSE (\u00b0C)": 0.562,
+      "R2": 0.974,
+      "Train Time (s)": 0.04
+    },
+    {
+      "Horizon": "T+6h",
+      "Model": "Ridge Regression",
+      "Family": "Linear",
+      "MAE (\u00b0C)": 0.866,
+      "RMSE (\u00b0C)": 1.112,
+      "R2": 0.897,
+      "Train Time (s)": 0.01
+    },
+    {
+      "Horizon": "T+24h",
+      "Model": "Ridge Regression",
+      "Family": "Linear",
+      "MAE (\u00b0C)": 0.745,
+      "RMSE (\u00b0C)": 1.001,
+      "R2": 0.917,
+      "Train Time (s)": 0.01
+    },
+    {
+      "Horizon": "T+1h",
+      "Model": "HistGradientBoosting",
+      "Family": "GBDT (Histogram)",
+      "MAE (\u00b0C)": 0.353,
+      "RMSE (\u00b0C)": 0.519,
+      "R2": 0.978,
+      "Train Time (s)": 4.07
+    },
+    {
+      "Horizon": "T+6h",
+      "Model": "HistGradientBoosting",
+      "Family": "GBDT (Histogram)",
+      "MAE (\u00b0C)": 0.806,
+      "RMSE (\u00b0C)": 1.043,
+      "R2": 0.91,
+      "Train Time (s)": 1.21
+    },
+    {
+      "Horizon": "T+24h",
+      "Model": "HistGradientBoosting",
+      "Family": "GBDT (Histogram)",
+      "MAE (\u00b0C)": 0.844,
+      "RMSE (\u00b0C)": 1.107,
+      "R2": 0.899,
+      "Train Time (s)": 1.18
+    },
+    {
+      "Horizon": "T+1h",
+      "Model": "Random Forest",
+      "Family": "Bagging Ensemble",
+      "MAE (\u00b0C)": 0.351,
+      "RMSE (\u00b0C)": 0.519,
+      "R2": 0.978,
+      "Train Time (s)": 5.17
+    },
+    {
+      "Horizon": "T+6h",
+      "Model": "Random Forest",
+      "Family": "Bagging Ensemble",
+      "MAE (\u00b0C)": 0.803,
+      "RMSE (\u00b0C)": 1.051,
+      "R2": 0.908,
+      "Train Time (s)": 5.53
+    },
+    {
+      "Horizon": "T+24h",
+      "Model": "Random Forest",
+      "Family": "Bagging Ensemble",
+      "MAE (\u00b0C)": 0.768,
+      "RMSE (\u00b0C)": 1.024,
+      "R2": 0.913,
+      "Train Time (s)": 5.02
+    },
+    {
+      "Horizon": "T+1h",
+      "Model": "Extra Trees",
+      "Family": "Randomized Trees",
+      "MAE (\u00b0C)": 0.351,
+      "RMSE (\u00b0C)": 0.512,
+      "R2": 0.978,
+      "Train Time (s)": 1.26
+    },
+    {
+      "Horizon": "T+6h",
+      "Model": "Extra Trees",
+      "Family": "Randomized Trees",
+      "MAE (\u00b0C)": 0.801,
+      "RMSE (\u00b0C)": 1.033,
+      "R2": 0.911,
+      "Train Time (s)": 1.22
+    },
+    {
+      "Horizon": "T+24h",
+      "Model": "Extra Trees",
+      "Family": "Randomized Trees",
+      "MAE (\u00b0C)": 0.758,
+      "RMSE (\u00b0C)": 1.008,
+      "R2": 0.916,
+      "Train Time (s)": 1.21
+    },
+    {
+      "Horizon": "T+1h",
+      "Model": "MLP Neural Network",
+      "Family": "Feedforward DNN",
+      "MAE (\u00b0C)": 0.411,
+      "RMSE (\u00b0C)": 0.57,
+      "R2": 0.973,
+      "Train Time (s)": 19.22
+    },
+    {
+      "Horizon": "T+6h",
+      "Model": "MLP Neural Network",
+      "Family": "Feedforward DNN",
+      "MAE (\u00b0C)": 0.771,
+      "RMSE (\u00b0C)": 1.014,
+      "R2": 0.915,
+      "Train Time (s)": 23.33
+    },
+    {
+      "Horizon": "T+24h",
+      "Model": "MLP Neural Network",
+      "Family": "Feedforward DNN",
+      "MAE (\u00b0C)": 0.869,
+      "RMSE (\u00b0C)": 1.131,
+      "R2": 0.894,
+      "Train Time (s)": 26.62
+    }
+  ],
+  "quantile_uncertainty_comparison": [
+    {
+      "Model": "XGBoost Quantile (WeatherGPT)",
+      "Pinball P10": 0.183,
+      "Pinball P50": 0.367,
+      "Pinball P90": 0.167,
+      "Mean Pinball": 0.239,
+      "Raw Cov (%)": 72.9,
+      "Conformal Margin": 0.21,
+      "Calib Cov (%)": 82.1,
+      "Calib Width (\u00b0C)": 2.6,
+      "Crossing (%)": 0.03,
+      "Fit Time (s)": 0.0
+    },
+    {
+      "Model": "HistGradientBoosting Quantile",
+      "Pinball P10": 0.185,
+      "Pinball P50": 0.368,
+      "Pinball P90": 0.173,
+      "Mean Pinball": 0.242,
+      "Raw Cov (%)": 71.0,
+      "Conformal Margin": 0.28,
+      "Calib Cov (%)": 82.6,
+      "Calib Width (\u00b0C)": 2.66,
+      "Crossing (%)": 0.31,
+      "Fit Time (s)": 9.85
+    },
+    {
+      "Model": "GradientBoosting Quantile",
+      "Pinball P10": 0.185,
+      "Pinball P50": 0.363,
+      "Pinball P90": 0.159,
+      "Mean Pinball": 0.235,
+      "Raw Cov (%)": 76.0,
+      "Conformal Margin": 0.12,
+      "Calib Cov (%)": 81.6,
+      "Calib Width (\u00b0C)": 2.53,
+      "Crossing (%)": 0.13,
+      "Fit Time (s)": 79.53
+    },
+    {
+      "Model": "Linear QuantileReg (Statsmodels)",
+      "Pinball P10": 0.186,
+      "Pinball P50": 0.358,
+      "Pinball P90": 0.165,
+      "Mean Pinball": 0.236,
+      "Raw Cov (%)": 73.5,
+      "Conformal Margin": 0.14,
+      "Calib Cov (%)": 79.7,
+      "Calib Width (\u00b0C)": 2.39,
+      "Crossing (%)": 0.05,
+      "Fit Time (s)": 21.85
+    }
+  ],
+  "precipitation_classification_comparison": [
+    {
+      "Model": "Global Train Base Rate",
+      "Brier Score": 0.158,
+      "Gain vs Clim (%)": -4.1,
+      "ROC-AUC": 0.5,
+      "PR-AUC": 0.196,
+      "Log Loss": 0.496,
+      "F1 (@0.40)": 0.0,
+      "Train Time (s)": 0.0
+    },
+    {
+      "Model": "Seasonal-Diurnal Climatology",
+      "Brier Score": 0.1518,
+      "Gain vs Clim (%)": 0.0,
+      "ROC-AUC": 0.788,
+      "PR-AUC": 0.43,
+      "Log Loss": 0.464,
+      "F1 (@0.40)": 0.511,
+      "Train Time (s)": 0.01
+    },
+    {
+      "Model": "XGBClassifier (WeatherGPT)",
+      "Brier Score": 0.1225,
+      "Gain vs Clim (%)": 19.3,
+      "ROC-AUC": 0.837,
+      "PR-AUC": 0.536,
+      "Log Loss": 0.387,
+      "F1 (@0.40)": 0.543,
+      "Train Time (s)": 0.37
+    },
+    {
+      "Model": "PyTorch LSTM Classifier",
+      "Brier Score": 0.127,
+      "Gain vs Clim (%)": 16.3,
+      "ROC-AUC": 0.827,
+      "PR-AUC": 0.486,
+      "Log Loss": 0.4,
+      "F1 (@0.40)": 0.556,
+      "Train Time (s)": 73.08
+    },
+    {
+      "Model": "Logistic Regression",
+      "Brier Score": 0.1231,
+      "Gain vs Clim (%)": 18.9,
+      "ROC-AUC": 0.83,
+      "PR-AUC": 0.514,
+      "Log Loss": 0.389,
+      "F1 (@0.40)": 0.537,
+      "Train Time (s)": 0.23
+    },
+    {
+      "Model": "HistGradientBoosting Clf",
+      "Brier Score": 0.1252,
+      "Gain vs Clim (%)": 17.5,
+      "ROC-AUC": 0.827,
+      "PR-AUC": 0.512,
+      "Log Loss": 0.389,
+      "F1 (@0.40)": 0.53,
+      "Train Time (s)": 2.19
+    },
+    {
+      "Model": "Random Forest Clf",
+      "Brier Score": 0.1284,
+      "Gain vs Clim (%)": 15.4,
+      "ROC-AUC": 0.83,
+      "PR-AUC": 0.549,
+      "Log Loss": 0.409,
+      "F1 (@0.40)": 0.546,
+      "Train Time (s)": 1.15
+    },
+    {
+      "Model": "Extra Trees Clf",
+      "Brier Score": 0.1295,
+      "Gain vs Clim (%)": 14.7,
+      "ROC-AUC": 0.83,
+      "PR-AUC": 0.525,
+      "Log Loss": 0.413,
+      "F1 (@0.40)": 0.53,
+      "Train Time (s)": 0.51
+    },
+    {
+      "Model": "MLP Classifier (DNN)",
+      "Brier Score": 0.1232,
+      "Gain vs Clim (%)": 18.8,
+      "ROC-AUC": 0.84,
+      "PR-AUC": 0.518,
+      "Log Loss": 0.382,
+      "F1 (@0.40)": 0.554,
+      "Train Time (s)": 6.67
+    }
+  ],
+  "anomaly_detection_comparison": [
+    {
+      "Detector": "IsolationForest (WeatherGPT ml/src/anomaly.py)",
+      "Flagged Test Hours": 57,
+      "Test Flag Rate (%)": 1.45,
+      "Shock Event Precision (%)": 38.6,
+      "Shock Event Recall (%)": 17.3
+    },
+    {
+      "Detector": "Local Outlier Factor (Density Novelty)",
+      "Flagged Test Hours": 151,
+      "Test Flag Rate (%)": 3.84,
+      "Shock Event Precision (%)": 20.5,
+      "Shock Event Recall (%)": 24.4
+    },
+    {
+      "Detector": "Parametric Residual Z-Score (|z| > 1.96)",
+      "Flagged Test Hours": 106,
+      "Test Flag Rate (%)": 2.7,
+      "Shock Event Precision (%)": 84.9,
+      "Shock Event Recall (%)": 70.9
+    }
+  ],
+  "top_shap_features": [
+    {
+      "Rank": 1,
+      "Feature": "temperature_2m",
+      "Mean |SHAP| (\u00b0C)": 1.463
+    },
+    {
+      "Rank": 2,
+      "Feature": "hour_sin",
+      "Mean |SHAP| (\u00b0C)": 0.274
+    },
+    {
+      "Rank": 3,
+      "Feature": "doy_sin",
+      "Mean |SHAP| (\u00b0C)": 0.233
+    },
+    {
+      "Rank": 4,
+      "Feature": "temp_lag_48h",
+      "Mean |SHAP| (\u00b0C)": 0.193
+    },
+    {
+      "Rank": 5,
+      "Feature": "doy_cos",
+      "Mean |SHAP| (\u00b0C)": 0.141
+    },
+    {
+      "Rank": 6,
+      "Feature": "temp_lag_24h",
+      "Mean |SHAP| (\u00b0C)": 0.122
+    },
+    {
+      "Rank": 7,
+      "Feature": "temp_lag_1h",
+      "Mean |SHAP| (\u00b0C)": 0.086
+    },
+    {
+      "Rank": 8,
+      "Feature": "cloud_cover",
+      "Mean |SHAP| (\u00b0C)": 0.08
+    },
+    {
+      "Rank": 9,
+      "Feature": "temp_roll_24h_std",
+      "Mean |SHAP| (\u00b0C)": 0.071
+    },
+    {
+      "Rank": 10,
+      "Feature": "temp_diff_3h",
+      "Mean |SHAP| (\u00b0C)": 0.066
+    }
+  ]
+}
